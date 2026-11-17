@@ -1,1 +1,20 @@
 :root{--green:#00843e;--green-d:#005b2e}.back-explore{display:block;padding:14px 20px;background:#f1f6ed;color:#005b2e;font-size:14px;text-decoration:none;min-height:48px}.top{background:white;border-bottom:1px solid #dce5db}.route-sound{border:1px solid #dce5db;padding:0 14px;border-radius:24px;font-size:13px;margin-top:12px;min-height:44px}.back-explore:focus-visible,.route-sound:focus-visible{outline:3px solid #eb6b00;outline-offset:2px}@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+.course{margin:14px 0 4px;padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:#f6faf2}.course-h{margin:0 0 8px;font-size:13px;font-weight:700;color:#007a30}.course-h b{font-size:17px}.course-list{list-style:none;margin:0 0 4px;padding:0;display:flex;flex-wrap:wrap;gap:6px}.course-list li{display:flex;align-items:center;gap:5px;font-size:13px;padding:4px 10px 4px 4px;border-radius:999px;background:#fff;border:1px solid var(--line);max-width:100%;overflow-wrap:anywhere}.course-list li span{flex:none;display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:#dfe5db;font-size:11px;font-weight:700}.course-list li.now{border-color:#eb6b00;font-weight:700}.course-list li.now span{background:#eb6b00;color:#fff}.course-list li.done{color:#7a857c}.course-list li.done span{background:#00a040;color:#fff}.course .link{min-height:44px}
+.nav .btn{min-height:48px}.map-head{flex-wrap:wrap}
+.note-line{margin:4px 0 0;font-size:12px;color:#5e6a61}
+/* 周3：道順画面は道具に徹する（1枚1文を大きく、次へを大きく、写真・演出なし） */
+.card-text{font-size:24px;line-height:1.6;letter-spacing:0}
+.card-sub{font-size:15px;color:#3f4b43}
+.nav .btn{min-height:60px;font-size:20px;border-radius:14px}
+.nav #next,.nav #next-stop,.nav #again{flex:2}
+.step-no{font-size:15px;padding:3px 12px}
+.card-fl{font-size:15px;color:#3f4b43}
+.from-now,.hint{font-size:14px;color:#3f4b43}
+.voice-bar{max-width:600px;margin:8px auto 0;padding:0 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.voice-bar[hidden]{display:none}
+.voice-btn{min-height:48px;padding:0 20px;border-radius:999px;border:2px solid #00843e;background:#fff;color:#005b2e;font-size:16px;font-weight:800}
+.voice-btn.on{background:#00843e;color:#fff}
+.voice-again{min-height:48px;padding:0 16px;border-radius:999px;border:1px solid #dfe5db;background:#fff;font-size:15px;font-weight:700}
+.voice-hint{font-size:14px;color:#3f4b43}
+.voice-bar.prominent .voice-btn:not(.on){background:#00843e;color:#fff}
+@media(max-width:400px){.card-text{font-size:23px}}

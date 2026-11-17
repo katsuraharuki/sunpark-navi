@@ -1,2 +1,44 @@
-<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>おのだサンパーク</title><link rel="stylesheet" href="explore.css"></head><body data-explore="true"><header class="site-head"><a class="brand" href="index.html"><span>おのだサンパーク<small>ONODA SUNPARK</small></span></a><span class="demo">非公式デモ</span><button id="sound" aria-pressed="false">音 OFF</button></header><main><section class="hero"><div class="hero-copy"><label class="search"><span class="sr-only">店名を検索</span><input id="query" type="search" placeholder="店名・トイレなどを検索"><span aria-hidden="true">⌕</span></label><button class="primary" id="surprise">おまかせで見つける <span>↗</span></button><div class="hero-note"><span class="tiny-dot"></span> 本館1F・2Fから見つけよう</div></div><div class="map-stage"><div class="map-caption"><span>YOUR NEXT STOP</span><strong id="map-title">気になる場所を、ひとつ。</strong></div><div id="map" class="map"></div><div class="floor-switch" aria-label="表示する階"><button data-floor="1" aria-pressed="true">1F</button><button data-floor="2" aria-pressed="false">2F</button></div><span class="map-note">公式フロア図から起こした目安</span></div></section><nav class="tabs" aria-label="メインメニュー"><button class="active" data-tab="discover" aria-current="page">見つける <span>↗</span></button><button data-tab="map">マップ <span>⌖</span></button><button data-tab="saved">保存 <span id="save-count">0</span></button></nav><section id="browse"><div class="section-head"><div><p class="eyebrow">FIND YOUR FAVORITE</p><h2 id="browse-title">今日は、こんな気分。</h2></div></div><div id="categories" class="categories"></div><div class="browse-meta"><p id="result-note"></p><button id="reset" class="text-btn">すべて見る ↗</button></div><div id="stores" class="store-list"></div></section><section class="editorial" id="events-section"><div class="section-head"><div><p class="eyebrow">WHAT'S ON</p><h2>次に寄りたい、きっかけ。</h2></div><span class="demo">公式サイト掲載情報</span></div><div id="events" class="events"></div><div class="pr"><span>PR掲載イメージ</span><h3>お買い物の途中に、<br>ひと息つきませんか。</h3><p>館内のカフェを探して、今日の休憩場所に。</p><button id="pr-cafe" class="text-btn">カフェ・ごはんを見つける ↗</button></div></section><footer><strong>おのだサンパーク</strong><p>このページは公式サイトではない、館内探索アプリの見本です。<br>店舗・館内図・道順は公式フロア図をもとにした目安（現地確認前）。</p><a href="staff.html">館の方へのご説明 ↗</a></footer></main><dialog id="detail"><button class="close" id="close" aria-label="閉じる">×</button><div id="detail-content"></div></dialog><div id="toast" role="status" aria-live="polite"></div><script src="mapdata.js"></script><script src="app.js"></script><script src="events.js"></script><script src="explore.js"></script></body></html>
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#ffffff"><title>おのだサンパーク</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Shippori+Mincho+B1:wght@600;700&display=swap"><link rel="stylesheet" href="explore.css"></head>
+<body data-explore="true">
+<div class="float-bar" id="float-bar" aria-hidden="true"><a class="fb-name" href="#top" tabindex="-1">おのだサンパーク</a><button id="fb-search" tabindex="-1">探す</button><button id="fb-saved" tabindex="-1">保存 <span id="fb-count">0</span></button></div>
 
+<section class="ch ch-sky" id="top" aria-labelledby="sky-title">
+<div class="sky-photo" aria-hidden="true"></div>
+<header class="site-head"><a class="brand" href="index.html">おのだサンパーク</a><span class="demo">非公式デモ</span><a class="staff-link" href="staff.html">館の方へ</a><button id="sound" aria-pressed="false">効果音 OFF</button></header>
+<div class="sky-in">
+<h1 id="sky-title">おのだサンパーク<br><span>館内ナビ</span></h1>
+<p class="about-line">本館のお店を探して、入口からの道順をスマホで見られます。</p>
+<label class="search"><span class="sr-only">店名を検索</span><input id="query" type="search" placeholder="店名・トイレなどを検索" enterkeyhint="search"><span aria-hidden="true">⌕</span></label>
+<div class="shortcuts" role="group" aria-label="近道"><button data-short="トイレ">トイレ</button><button data-short="エレベーター">エレベーター</button><button data-short="銀行・ATM">ATM</button><button data-short="案内所">案内所</button><button id="surprise" class="ghost">おまかせ</button></div>
+<p class="sky-note">非公式の見本・公式フロア図から起こした目安（現地未確認）</p>
+</div>
+<p class="credit">写真：おのだサンパーク公式サイトより（提案用に一時借用）</p>
+</section>
+
+<main>
+<section class="ch ch-inside" id="inside" aria-labelledby="inside-title">
+<div class="inside-photo" aria-hidden="true"></div>
+<div class="ch-head"><h2 id="inside-title">館の中へ</h2><p>1F と 2F。区画を押すと、そのお店へ。</p></div>
+<div class="map-stage"><div class="map-caption"><strong id="map-title">気になる場所を、ひとつ。</strong></div><div id="map" class="map"></div><div class="floor-switch" aria-label="表示する階"><button data-floor="1" aria-pressed="true">1F</button><button data-floor="2" aria-pressed="false">2F</button></div><span class="map-note">公式フロア図から起こした目安</span></div>
+<div class="try-phone" id="try-phone" hidden><div class="qr" aria-label="スマホで開くためのQRコード"></div><p>スマホで試す<small>読み取ると、この見本がスマホで開きます</small></p></div>
+<p class="credit dark">写真：おのだサンパーク公式サイトより（提案用に一時借用）</p>
+</section>
+
+<section class="ch ch-shop" id="shop" aria-labelledby="browse-title">
+<div class="ch-head"><h2 id="browse-title">お店を探す</h2></div>
+<nav class="tabs" aria-label="お店の見方"><button class="active" data-tab="discover" aria-current="page">見つける</button><button data-tab="map">地図で</button><button data-tab="saved">保存 <span id="save-count">0</span></button></nav>
+<section id="browse"><div id="categories" class="categories"></div><div class="browse-meta"><p id="result-note"></p><button id="reset" class="text-btn">すべて見る</button></div><div id="stores" class="store-list"></div></section>
+</section>
+
+<section class="ch ch-events" id="events-section" aria-labelledby="events-title">
+<div class="ch-head"><h2 id="events-title">イベント</h2><p>公式サイトに載っている開催予定です。</p></div>
+<div id="events" class="events"></div>
+<div class="pr"><span>PR掲載イメージ</span><h3>お買い物の途中に、ひと息。</h3><p>館内のカフェを探して、今日の休憩場所に。</p><button id="pr-cafe" class="text-btn">カフェ・ごはんを見つける</button></div>
+</section>
+
+<section class="ch ch-staff" aria-labelledby="staff-title">
+<h2 id="staff-title">館の方へ</h2><p>この見本で館に期待できることと、館内QRの印刷用ページ。</p><a class="primary" href="staff.html">ご説明を見る <span>→</span></a>
+</section>
+<footer><strong>おのだサンパーク</strong><p>公式サイトではない、館内ナビの見本です。店舗・館内図・道順は公式フロア図から起こした目安（現地未確認）。</p></footer>
+</main>
+<dialog id="detail"><button class="close" id="close" aria-label="閉じる">×</button><div id="detail-content"></div></dialog><div id="toast" role="status" aria-live="polite"></div><script src="mapdata.js"></script><script src="app.js"></script><script src="events.js"></script><script src="explore.js"></script></body></html>

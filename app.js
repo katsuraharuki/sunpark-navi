@@ -225,9 +225,9 @@
   }
 
   // 道順 → カード
-  function cards(r, dest, startId) {
+  function cards(r, dest, startId, avoidName) { // avoidName：目印に使わない店（寄り道コースで、いま出てきた店）
     var startIsEntrance = !startId || /入口/.test((startById[startId] || {}).label || '入口');
-    var out = [], said = {}; said[dest.name] = true;
+    var out = [], said = {}; said[dest.name] = true; if (avoidName) said[avoidName] = true;
     var walks = r.legs.filter(function (l) { return !l.lift; });
     r.legs.forEach(function (leg, li) {
       if (leg.lift) {
@@ -268,14 +268,85 @@
     return out;
   }
 
-  var Nav = { M: M, stores: stores, storeById: storeById, search: search, route: route, cards: cards, starts: starts, lifts: lifts, norm: norm };
+  // ---------- 寄り道コース（店の前から次の店へ） ----------
+  // route() と同じ計算を、入口ではなく任意の点（店の前＝door）から行う。route() 自体は変えない。
+  function routeFromPoint(pt, storeId, stepFree) {
+    var ds = storeById[storeId];
+    if (!pt || !ds || ds.east || !G[pt.floor]) return null;
+    var A = distFrom(pt.floor, pt);
+    if (pt.floor === ds.floor) {
+      var t = cellOf(ds.floor, ds.door);
+      if (A.d[t] === Infinity) return null;
+      return { legs: [{ floor: pt.floor, pts: smooth(pt.floor, trace(A, t).reverse()) }], cost: A.d[t] };
+    }
+    var B = distFrom(ds.floor, ds.door), best = null;
+    Object.keys(lifts).forEach(function (k) {
+      var L = lifts[k]; if (stepFree && !L.stepFree) return;
+      var la = L[pt.floor], lb = L[ds.floor]; if (!la || !lb) return;
+      var c = A.d[cellOf(pt.floor, la)] + LIFT_COST[L.kind] + B.d[cellOf(ds.floor, lb)];
+      if (c < (best ? best.c : Infinity)) best = { c: c, L: L };
+    });
+    if (!best || best.c === Infinity) return null;
+    var L = best.L, la = L[pt.floor], lb = L[ds.floor];
+    return { legs: [{ floor: pt.floor, pts: smooth(pt.floor, trace(A, cellOf(pt.floor, la)).reverse()) }, { lift: L, from: pt.floor, to: ds.floor }, { floor: ds.floor, pts: smooth(ds.floor, trace(B, cellOf(ds.floor, lb))) }], cost: best.c };
+  }
+  // 出発点：入口ID または 店ID（その店の前）
+  function pointOf(id) {
+    if (startById[id]) { var s = startById[id]; return { floor: s.floor, x: s.x, y: s.y, label: s.label, entrance: true }; }
+    var st = storeById[id];
+    if (st && !st.east) return { floor: st.floor, x: st.door.x, y: st.door.y, label: st.name + 'の前', entrance: false, storeId: st.id };
+    return null;
+  }
+  // 1区間ぶん：道順とカード。店の前からの区間は、最初の言い回しを「◯◯の前から」に直す
+  function legOf(fromId, toId, stepFree) {
+    var p = pointOf(fromId), d = storeById[toId]; if (!p || !d || d.east) return null;
+    var r = p.entrance ? route(fromId, toId, stepFree) : routeFromPoint(p, toId, stepFree);
+    if (!r) return null;
+    var cs = cards(r, d, p.entrance ? fromId : undefined, p.entrance ? undefined : storeById[fromId].name);
+    if (!p.entrance && cs[0] && cs[0].kind === 'walk') cs[0].text = cs[0].text.replace(/^入口を入って、/, p.label + 'から、');
+    return { from: fromId, to: toId, r: r, cards: cs, cost: r.cost };
+  }
+  function floorMoves(r) { return r.legs.filter(function (l) { return l.lift; }).length; }
+  // 決めた順番どおりに区間をつなぐ
+  function courseLegs(startId, ids, stepFree) {
+    var out = [], from = startId;
+    for (var i = 0; i < ids.length; i++) { var lg = legOf(from, ids[i], stepFree); if (!lg) return null; out.push(lg); from = ids[i]; }
+    return out;
+  }
+  // 近い順（貪欲法）：いまいる所から、道のりがいちばん短い店を次に選ぶ。道順が出ない店・東館は外す
+  function courseOrder(startId, ids, stepFree) {
+    var left = [], skipped = [], seen = {};
+    ids.forEach(function (id) { var s = storeById[id]; if (seen[id]) return; seen[id] = 1; if (!s || s.east) skipped.push(id); else left.push(id); });
+    var legs = [], from = startId;
+    if (!pointOf(startId)) return null;
+    while (left.length) {
+      var best = null;
+      left.forEach(function (id) { var lg = legOf(from, id, stepFree); if (lg && (!best || lg.cost < best.cost)) best = lg; });
+      if (!best) { skipped = skipped.concat(left); break; }
+      legs.push(best); left.splice(left.indexOf(best.to), 1); from = best.to;
+    }
+    return { order: legs.map(function (l) { return l.to; }), legs: legs, skipped: skipped,
+      moves: legs.reduce(function (a, l) { return a + floorMoves(l.r); }, 0) };
+  }
+  // 館内QR：?here=<入口ID> を入口に解決する（知らないIDは null）
+  function hereFrom(search) {
+    var id; try { id = new URLSearchParams(search || '').get('here'); } catch (e) { return null; }
+    return id && startById[id] ? id : null;
+  }
+
+  var Nav = { M: M, stores: stores, storeById: storeById, search: search, route: route, cards: cards, starts: starts, lifts: lifts, norm: norm,
+    startById: startById, routeFromPoint: routeFromPoint, pointOf: pointOf, legOf: legOf, courseLegs: courseLegs, courseOrder: courseOrder, floorMoves: floorMoves, hereFrom: hereFrom, CELL: CELL,
+    PUBLIC_URL: 'https://katsuraharuki.github.io/sunpark-navi/index.html' };
   if (typeof module !== 'undefined' && module.exports) { module.exports = Nav; return; }
   window.Nav = Nav;
   if (document.body.dataset.explore) return;
 
   // ======================= 画面 =======================
   var $ = function (id) { return document.getElementById(id); };
-  var state = { from: null, to: null, stepFree: false, idx: 0, mapFloor: 1, r: null, cards: null, q: '' };
+  var state = { from: null, to: null, stepFree: false, idx: 0, mapFloor: 1, r: null, cards: null, q: '', course: null, cl: 0, legs: null };
+  var REDUCED = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+  // いまの区間の出発点（コースの2区間目からは、前の店の前）
+  function legStart() { return state.course && state.cl > 0 ? pointOf(state.course[state.cl - 1]) : pointOf(state.from); }
   function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function floorLabel(f) { return typeof f === 'number' ? f + 'F' : f; }
 
@@ -285,17 +356,26 @@
     var to = q.get('to');
     if (to) { var hit = stores.filter(function (s) { return s.name === to; })[0]; if (hit) state.to = hit.id; }
     state.stepFree = q.get('stepfree') === '1';
+    var cs = (q.get('course') || '').split(',').filter(function (id, i, a) { return storeById[id] && !storeById[id].east && a.indexOf(id) === i; }).slice(0, 6);
+    if (cs.length) { state.course = cs; state.cl = Math.max(0, Math.min(cs.length - 1, parseInt(q.get('leg'), 10) || 0)); state.to = cs[state.cl]; }
   }
   function writeUrl() {
     var q = new URLSearchParams();
     if (state.from) q.set('from', state.from);
-    if (state.to) q.set('to', storeById[state.to].name);
+    if (state.course) { q.set('course', state.course.join(',')); q.set('leg', String(state.cl)); }
+    else if (state.to) q.set('to', storeById[state.to].name);
     if (state.stepFree) q.set('stepfree', '1');
     var s = q.toString();
     try { history.replaceState(null, '', location.pathname + (s ? '?' + s : '')); } catch (e) { /* file:// など */ }
   }
   function compute() {
     state.r = null; state.cards = null; state.idx = 0;
+    if (state.course) {
+      state.legs = state.from ? courseLegs(state.from, state.course, state.stepFree) : null;
+      state.to = state.course[state.cl];
+      if (state.legs) { var lg = state.legs[state.cl]; state.r = lg.r; state.cards = lg.cards; state.mapFloor = state.cards[0].floor; }
+      return;
+    }
     if (!state.from || !state.to || storeById[state.to].east) return;
     state.r = route(state.from, state.to, state.stepFree);
     if (state.r) { state.cards = cards(state.r, storeById[state.to], state.from); state.mapFloor = state.cards[0].floor; }
@@ -345,34 +425,51 @@
       '<p class="dest-name">' + esc(d.name) + '</p><p class="dest-meta">' + esc(floorLabel(d.floor)) + '・' + esc(d.cat) + '</p></div>' +
       '<button class="link" id="change-to">変える</button></div>';
   }
-  function bindDestHead() { var b = $('change-to'); if (b) b.addEventListener('click', function () { state.to = null; writeUrl(); compute(); render(); setTimeout(function () { $('q').focus(); }, 0); }); }
+  function bindDestHead() { var b = $('change-to'); if (b) b.addEventListener('click', function () { state.to = null; state.course = null; writeUrl(); compute(); render(); setTimeout(function () { $('q').focus(); }, 0); }); }
 
   // ---------- 道順の画面 ----------
   function renderRoute() {
-    var d = storeById[state.to], cs = state.cards, c = cs[state.idx];
-    var html = destHead(d);
-    html += '<div class="opts"><p class="from-now">出発：<b>' + esc(startById[state.from].label) + '</b>　<button class="link" id="change-from">変える</button></p>' +
+    var d = storeById[state.to], cs = state.cards, c = cs[state.idx], co = state.course, last = !co || state.cl === co.length - 1;
+    var html = '';
+    if (co) {
+      html += '<section class="course" aria-label="寄り道コース"><p class="course-h">寄り道コース <b>' + (state.cl + 1) + '</b> / ' + co.length + '店目</p><ol class="course-list">' +
+        co.map(function (id, i) { return '<li class="' + (i < state.cl ? 'done' : i === state.cl ? 'now' : '') + '"><span>' + (i + 1) + '</span>' + esc(storeById[id].name.replace(/・Standard Products/, '')) + '</li>'; }).join('') +
+        '</ol><button class="link" id="quit-course">コースをやめる</button></section>';
+    }
+    html += destHead(d);
+    var sp = legStart();
+    html += '<div class="opts"><p class="from-now">出発：<b>' + esc(sp.label) + '</b>' + (!co || state.cl === 0 ? '　<button class="link" id="change-from">変える</button>' : '') + '</p>' +
       '<div class="seg-wrap" role="group" aria-label="道の選び方"><button class="seg' + (state.stepFree ? '' : ' on') + '" data-sf="0">ふつう</button>' +
       '<button class="seg' + (state.stepFree ? ' on' : '') + '" data-sf="1">車いす・ベビーカー</button></div></div>';
     var stepTag = c.kind === 'arrive' ? '到着' : (state.idx + 1) + ' / ' + (cs.length - 1);
     html += '<section class="card' + (c.kind === 'arrive' ? ' arrive' : '') + '" aria-live="polite">' +
       '<div class="card-top"><span class="step-no">' + stepTag + '</span><span class="card-fl">' + c.floor + '階' + (c.kind === 'lift' ? ' → ' + c.floorTo + '階' : '') + '</span></div>' +
       '<p class="card-text">' + esc(c.text) + '</p>' + (c.sub ? '<p class="card-sub">' + esc(c.sub) + '</p>' : '') +
-      '<div class="nav"><button id="prev" class="btn"' + (state.idx === 0 ? ' disabled' : '') + '>前へ</button>' +
-      (state.idx === cs.length - 1 ? '<button id="again" class="btn primary">ほかの店を探す</button>' : '<button id="next" class="btn primary">次へ</button>') + '</div></section>';
+      (c.kind === 'arrive' && co ? '<p class="card-sub">' + (last ? 'コースの最後のお店です。' : '次は ' + esc(storeById[co[state.cl + 1]].name) + ' です。') + '</p>' : '') +
+      '<div class="nav"><button id="prev" class="btn"' + (state.idx === 0 && !(co && state.cl > 0) ? ' disabled' : '') + '>' + (state.idx === 0 && co && state.cl > 0 ? '前の店へ' : '前へ') + '</button>' +
+      (state.idx === cs.length - 1 ? (last ? '<button id="again" class="btn primary">' + (co ? 'コースを終える' : 'ほかの店を探す') + '</button>' : '<button id="next-stop" class="btn primary">次の店へ →</button>') : '<button id="next" class="btn primary">次へ</button>') + '</div></section>';
     var floorsUsed = {}; cs.forEach(function (x) { floorsUsed[x.floor] = 1; if (x.floorTo) floorsUsed[x.floorTo] = 1; });
     html += '<div class="map-head"><div class="floors">' + [1, 2].map(function (f) { return '<button class="fl' + (state.mapFloor === f ? ' on' : '') + '" data-fl="' + f + '">' + f + 'F' + (floorsUsed[f] ? '' : '') + '</button>'; }).join('') +
       '</div><p class="legend"><span class="lg lg-route"></span>道順　<span class="lg lg-dest"></span>行き先</p></div>';
     html += '<div class="map">' + renderMap() + '</div>';
     html += '<p class="hint">' + (state.stepFree ? 'エレベーターだけを使う道順の目安です。段差・通路幅・扉は現地未確認です。' : '公式フロアマップから起こした道順の目安です（現地未確認）。') + '</p>';
     $('main').innerHTML = html;
-    $('prev').addEventListener('click', function () { go(-1); });
+    $('prev').addEventListener('click', function () { if (state.idx === 0 && co && state.cl > 0) setLeg(state.cl - 1, true); else go(-1); });
     if ($('next')) $('next').addEventListener('click', function () { go(1); });
-    if ($('again')) $('again').addEventListener('click', function () { state.to = null; writeUrl(); compute(); render(); setTimeout(function () { $('q').focus(); }, 0); });
-    $('change-from').addEventListener('click', function () { state.from = null; writeUrl(); compute(); render(); });
+    if ($('next-stop')) $('next-stop').addEventListener('click', function () { setLeg(state.cl + 1, false); });
+    if ($('again')) $('again').addEventListener('click', function () { state.course = null; state.to = null; writeUrl(); compute(); render(); setTimeout(function () { $('q').focus(); }, 0); });
+    if ($('quit-course')) $('quit-course').addEventListener('click', function () { state.course = null; writeUrl(); compute(); render(); });
+    if ($('change-from')) $('change-from').addEventListener('click', function () { state.from = null; writeUrl(); compute(); render(); });
     bind('.seg', function (b) { state.stepFree = b.getAttribute('data-sf') === '1'; writeUrl(); compute(); render(); });
     bind('.fl', function (b) { state.mapFloor = +b.getAttribute('data-fl'); render(); });
     bindDestHead();
+  }
+  // コースの区間を切り替える（atEnd：前の店へ戻る時は、その区間の到着カードを出す）
+  function setLeg(n, atEnd) {
+    if (!state.course || n < 0 || n >= state.course.length) return;
+    state.cl = n; writeUrl(); compute();
+    if (state.cards && atEnd) { state.idx = state.cards.length - 1; state.mapFloor = state.cards[state.idx].floor; }
+    render(); window.scrollTo(0, 0);
   }
   function go(dlt) {
     var n = state.idx + dlt; if (n < 0 || n >= state.cards.length) return;
@@ -458,10 +555,17 @@
       s += '<text x="' + px + '" y="' + (py - R * 3.1) + '" font-size="' + 9 * u + '" font-weight="700" text-anchor="middle" fill="#b34f00" paint-order="stroke" stroke="#fff" stroke-width="' + 2.6 * u + '">' + esc(d.name.replace(/・Standard Products/, '')) + '</text>';
     }
     // 出発
-    var st0 = startById[state.from];
+    var st0 = legStart();
     if (st0.floor === fl) {
       s += '<circle cx="' + st0.x + '" cy="' + st0.y + '" r="' + 8 * u + '" fill="#fff" stroke="#00a040" stroke-width="' + 3.4 * u + '"/>';
       s += '<text x="' + st0.x + '" y="' + (st0.y + 19 * u) + '" font-size="' + 9 * u + '" font-weight="700" text-anchor="middle" fill="#007a30" paint-order="stroke" stroke="#fff" stroke-width="' + 2.4 * u + '">出発</text>';
+    }
+    // 歩く点：いまのカードの線の上を、光る点が端まで歩く（動きを減らす設定では、線の始まりに止めて置く）
+    if (cur && cur.floor === fl && cur.kind === 'walk' && cur.pts.length > 1) {
+      var p0 = cur.pts[0], path = 'M' + cur.pts.map(function (p) { return Math.round(p.x) + ',' + Math.round(p.y); }).join(' L');
+      s += '<g class="walker"' + (REDUCED ? ' transform="translate(' + Math.round(p0.x) + ',' + Math.round(p0.y) + ')"' : '') + '>' +
+        '<circle r="' + 9 * u + '" fill="#fff" fill-opacity=".55"/><circle r="' + 5.2 * u + '" fill="#fff" stroke="#00a040" stroke-width="' + 2.6 * u + '"/>' +
+        (REDUCED ? '' : '<animateMotion dur="2.6s" repeatCount="indefinite" calcMode="linear" keyPoints="0;1;1" keyTimes="0;0.85;1" path="' + path + '"/>') + '</g>';
     }
     // 昇降機を降りた所
     state.cards.forEach(function (c) {

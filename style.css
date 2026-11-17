@@ -6,8 +6,8 @@
   --green:#00a040; --green-d:#007a30; --leaf:#58b530; --lime:#aacd06;
   --orange:#eb6b00; --orange-d:#b34f00; --orange-l:#fde3cc;
   --ink:#24302a; --sub:#5e6a61; --line:#dfe5db; --soft:#f3f7ef; --bg:#ffffff;
-  --round:"Zen Maru Gothic","Hiragino Maru Gothic ProN","Hiragino Sans","Yu Gothic UI","Meiryo",sans-serif;
-  --sans:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Meiryo",sans-serif;
+  --round:"BIZ UDPGothic","Hiragino Sans","Yu Gothic","Meiryo",sans-serif;
+  --sans:"BIZ UDPGothic","Hiragino Sans","Yu Gothic","Meiryo",sans-serif;
 }
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
