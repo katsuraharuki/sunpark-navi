@@ -18,3 +18,10 @@
 .voice-hint{font-size:14px;color:#3f4b43}
 .voice-bar.prominent .voice-btn:not(.on){background:#00843e;color:#fff}
 @media(max-width:400px){.card-text{font-size:23px}}
+/* 追加1-2：道順画面の地図の拡大 */
+.map-wrap{position:relative}
+#nmap{touch-action:pan-y;user-select:none;-webkit-user-select:none}
+#nmap.zoomed{touch-action:none;cursor:grab}
+.nzoom{position:absolute;right:10px;bottom:10px;display:flex;gap:2px;background:#fff;border-radius:999px;padding:3px;box-shadow:0 2px 8px #0000002a}
+.nzoom button{min-width:44px;min-height:44px;border:0;background:none;border-radius:999px;font-size:19px;color:#24302a;cursor:pointer}
+.nz-hint{font-size:13px;color:#3f4b43;margin:6px 0 0}

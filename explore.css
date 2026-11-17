@@ -243,3 +243,23 @@ main.staff footer{padding-left:0;padding-right:0}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}.plates.intro .plate-2f,.plate-tag,.demo-badge{display:none}}
 .brand small{display:block}
+
+/* 追加1：店の記号・地図の拡大 */
+.map{touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.map.zoomed{touch-action:none;cursor:grab}
+.map.zoomed:active{cursor:grabbing}
+.store-ic{flex:none;display:grid;place-items:center;width:36px;height:36px;border-radius:50%;background:#eef4ee;color:#1d4a32}
+.store-ic .ic{width:21px;height:21px}
+.detail-head{display:flex;gap:14px;align-items:center;margin-bottom:6px}
+.detail-ic{flex:none;display:grid;place-items:center;width:56px;height:56px;border-radius:50%;background:#eef4ee;color:#1d4a32}
+.detail-ic .ic{width:30px;height:30px}
+.detail-head h2{margin-bottom:0}
+@media(max-width:700px){.store-ic{width:32px;height:32px}.store-ic .ic{width:19px;height:19px}}
+/* 追加1-2：スマホの地図の窓を高く（画面の高さの約6割）。地図は窓いっぱいに描き、操作の札は地図の上に重ねる */
+@media(max-width:999px){
+  .ch-inside .map-stage{display:flex;flex-direction:column;height:max(480px,66vh)}
+  .ch-inside .map{flex:1;min-height:0;padding:0 0 0}
+  .ch-inside .plates{height:100%}
+  .ch-inside .plates>svg:first-child{height:100%;width:100%}
+  .ch-inside .map-caption{padding-bottom:6px}
+}

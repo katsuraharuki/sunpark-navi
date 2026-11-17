@@ -343,7 +343,7 @@
 
   // ======================= 画面 =======================
   var $ = function (id) { return document.getElementById(id); };
-  var state = { from: null, to: null, stepFree: false, idx: 0, mapFloor: 1, r: null, cards: null, q: '', course: null, cl: 0, legs: null };
+  var state = { from: null, to: null, stepFree: false, idx: 0, mapFloor: 1, r: null, cards: null, q: '', course: null, cl: 0, legs: null, nz: null };
   var REDUCED = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
   // いまの区間の出発点（コースの2区間目からは、前の店の前）
   function legStart() { return state.course && state.cl > 0 ? pointOf(state.course[state.cl - 1]) : pointOf(state.from); }
@@ -451,9 +451,10 @@
     var floorsUsed = {}; cs.forEach(function (x) { floorsUsed[x.floor] = 1; if (x.floorTo) floorsUsed[x.floorTo] = 1; });
     html += '<div class="map-head"><div class="floors">' + [1, 2].map(function (f) { return '<button class="fl' + (state.mapFloor === f ? ' on' : '') + '" data-fl="' + f + '">' + f + 'F' + (floorsUsed[f] ? '' : '') + '</button>'; }).join('') +
       '</div><p class="legend"><span class="lg lg-route"></span>道順　<span class="lg lg-dest"></span>行き先</p></div>';
-    html += '<div class="map">' + renderMap() + '</div>';
-    html += '<p class="hint">' + (state.stepFree ? 'エレベーターだけを使う道順の目安です。段差・通路幅・扉は現地未確認です。' : '公式フロアマップから起こした道順の目安です（現地未確認）。') + '</p>';
-    $('main').innerHTML = html;
+    state.nz = null; // カードを進めた・階を替えた時は、今までどおり、その区間が見える位置に戻す
+    html += '<div class="map-wrap"><div class="map" id="nmap">' + renderMap() + '</div><div class="nzoom"><button type="button" id="nz-in" aria-label="地図を拡大">＋</button><button type="button" id="nz-out" aria-label="地図を縮小">−</button><button type="button" id="nz-reset" aria-label="地図の拡大を戻す">↺</button></div></div>';
+    html += '<p class="nz-hint" hidden>Ctrl（⌘）＋ホイールで地図を拡大できます</p>'; html += '<p class="hint">' + (state.stepFree ? 'エレベーターだけを使う道順の目安です。段差・通路幅・扉は現地未確認です。' : '公式フロアマップから起こした道順の目安です（現地未確認）。') + '</p>';
+    $('main').innerHTML = html; bindZoom();
     $('prev').addEventListener('click', function () { if (state.idx === 0 && co && state.cl > 0) setLeg(state.cl - 1, true); else go(-1); });
     if ($('next')) $('next').addEventListener('click', function () { go(1); });
     if ($('next-stop')) $('next-stop').addEventListener('click', function () { setLeg(state.cl + 1, false); });
@@ -494,9 +495,74 @@
     var cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
     return { x: cx - w / 2, y: cy - h / 2, w: w, h: h };
   }
+  // ---------- 道順画面の地図の拡大（＋−↺・ピンチ・拡大中のドラッグ・Ctrl＋ホイール） ----------
+  // 区間が見える枠（viewBox）を基準に、その中を拡大する。線・点・ピン・「出発」は地図の座標のままなので位置は変わらない
+  var NZMAX = 6, nzDrag = { pts: {}, moved: 0, justMoved: false, d0: 0, z0: 1, timer: 0 };
+  function zoomedBox(vb) {
+    var v = state.nz; if (!v || v.z <= 1.001) { state.nz = null; return vb; }
+    var w = vb.w / v.z, h = vb.h / v.z;
+    v.cx = Math.min(vb.x + vb.w - w / 2, Math.max(vb.x + w / 2, v.cx)); v.cy = Math.min(vb.y + vb.h - h / 2, Math.max(vb.y + h / 2, v.cy));
+    return { x: v.cx - w / 2, y: v.cy - h / 2, w: w, h: h };
+  }
+  function setNz(z, cx, cy) {
+    var b = viewBox(state.mapFloor); z = Math.max(1, Math.min(NZMAX, z));
+    if (z <= 1.001) { state.nz = null; return; }
+    var v = state.nz || { cx: b.x + b.w / 2, cy: b.y + b.h / 2 };
+    state.nz = { z: z, cx: cx == null ? v.cx : cx, cy: cy == null ? v.cy : cy };
+  }
+  function nmapSvg() { var m = $('nmap'); return m && m.querySelector('svg'); }
+  function refreshMap() { var m = $('nmap'); if (!m) return; m.innerHTML = renderMap(); m.classList.toggle('zoomed', !!state.nz); }
+  function liveNz() {
+    var sv = nmapSvg(); if (!sv) return;
+    var vb = zoomedBox(viewBox(state.mapFloor));
+    sv.setAttribute('viewBox', [vb.x, vb.y, vb.w, vb.h].join(' '));
+    $('nmap').classList.toggle('zoomed', !!state.nz);
+    clearTimeout(nzDrag.timer); nzDrag.timer = setTimeout(refreshMap, 140); // 動きが止まったら、記号と名前を今の拡大率で描き直す
+  }
+  function nzAround(clientX, clientY, z) {
+    var sv = nmapSvg(); if (!sv) return;
+    var m = sv.getScreenCTM(), b = viewBox(state.mapFloor), r = sv.getBoundingClientRect();
+    z = Math.max(1, Math.min(NZMAX, z));
+    if (!m) { setNz(z); liveNz(); return; }
+    var pt = sv.createSVGPoint(); pt.x = clientX; pt.y = clientY; var p = pt.matrixTransform(m.inverse());
+    var s = Math.min(r.width / (b.w / z), r.height / (b.h / z));
+    setNz(z, p.x - (clientX - (r.left + r.width / 2)) / s, p.y - (clientY - (r.top + r.height / 2)) / s); liveNz();
+  }
+  function bindZoom() {
+    var m = $('nmap'); if (!m) return;
+    $('nz-in').addEventListener('click', function () {
+      var cur = state.cards[state.idx], c = null;
+      if (!state.nz && cur && cur.floor === state.mapFloor && cur.pts && cur.pts.length) { var a = cur.pts[0], b = cur.pts[cur.pts.length - 1]; c = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; } // 最初の拡大は、いまのカードの区間を真ん中に
+      setNz((state.nz ? state.nz.z : 1) * 1.6, c && c.x, c && c.y); refreshMap();
+    });
+    $('nz-out').addEventListener('click', function () { setNz((state.nz ? state.nz.z : 1) / 1.6); refreshMap(); });
+    $('nz-reset').addEventListener('click', function () { state.nz = null; refreshMap(); });
+    m.addEventListener('pointerdown', function (e) {
+      if (e.button) return; nzDrag.pts[e.pointerId] = { x: e.clientX, y: e.clientY }; nzDrag.moved = 0; nzDrag.justMoved = false;
+      var k = Object.keys(nzDrag.pts);
+      if (k.length === 2) { var a = nzDrag.pts[k[0]], c = nzDrag.pts[k[1]]; nzDrag.d0 = Math.hypot(a.x - c.x, a.y - c.y); nzDrag.z0 = state.nz ? state.nz.z : 1; }
+    });
+    m.addEventListener('pointermove', function (e) {
+      var prev = nzDrag.pts[e.pointerId]; if (!prev) return; nzDrag.pts[e.pointerId] = { x: e.clientX, y: e.clientY };
+      var k = Object.keys(nzDrag.pts);
+      if (k.length === 2 && nzDrag.d0) { var a = nzDrag.pts[k[0]], c = nzDrag.pts[k[1]]; nzDrag.justMoved = true; nzAround((a.x + c.x) / 2, (a.y + c.y) / 2, nzDrag.z0 * Math.hypot(a.x - c.x, a.y - c.y) / nzDrag.d0); return; }
+      if (k.length !== 1 || !state.nz) return;
+      var dx = e.clientX - prev.x, dy = e.clientY - prev.y; nzDrag.moved += Math.abs(dx) + Math.abs(dy); if (nzDrag.moved < 6) return;
+      if (!nzDrag.justMoved) { nzDrag.justMoved = true; try { m.setPointerCapture(e.pointerId); } catch (_) {} }
+      var sv = nmapSvg(), r = sv.getBoundingClientRect(), vb = zoomedBox(viewBox(state.mapFloor)), s = Math.min(r.width / vb.w, r.height / vb.h);
+      state.nz.cx -= dx / s; state.nz.cy -= dy / s; liveNz();
+    });
+    function end(e) { delete nzDrag.pts[e.pointerId]; if (Object.keys(nzDrag.pts).length < 2) nzDrag.d0 = 0; }
+    m.addEventListener('pointerup', end); m.addEventListener('pointercancel', end);
+    var hintAt = 0;
+    m.addEventListener('wheel', function (e) {
+      if (!(e.ctrlKey || e.metaKey)) { if (Date.now() - hintAt > 6000) { hintAt = Date.now(); var h = document.querySelector('#main .nz-hint'); if (h) { h.hidden = false; setTimeout(function () { h.hidden = true; }, 2400); } } return; }
+      e.preventDefault(); nzAround(e.clientX, e.clientY, (state.nz ? state.nz.z : 1) * Math.exp(-e.deltaY * 0.0022));
+    }, { passive: false });
+  }
   var LIFT_ICON = { escalator: 'エス', stairs: '階段', elevator: 'EV' };
   function renderMap() {
-    var fl = state.mapFloor, vb = viewBox(fl), u = vb.w / 360, d = storeById[state.to], cur = state.cards[state.idx];
+    var fl = state.mapFloor, vb = zoomedBox(viewBox(fl)), u = vb.w / 360, d = storeById[state.to], cur = state.cards[state.idx];
     var s = '<svg viewBox="' + [vb.x, vb.y, vb.w, vb.h].map(Math.round).join(' ') + '" role="img" aria-label="' + fl + '階の地図">';
     s += '<defs><marker id="arw" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="2.6" markerHeight="2.6" orient="auto-start-reverse"><path d="M1,1 L9,5 L1,9 z" fill="#fff"/></marker></defs>';
     s += '<polygon points="' + pp(G[fl].outline) + '" fill="#fff" stroke="#b9c2b5" stroke-width="' + 1.4 * u + '" stroke-linejoin="round"/>';
@@ -517,7 +583,16 @@
       var must = routeNames[st.name];
       if (!must && (fs < 5.2 * u || bh < 7 * u)) return;
       if (must) fs = Math.max(fs, 6.5 * u);
-      var c = centroid(poly);
+      var c = centroid(poly), IC = window.SunparkIcons;
+      // 店名の横に小さく記号（入りきる時だけ。入らなければ今までどおり名前だけ）
+      if (IC) {
+        var fs2 = Math.min(fs, bw / (nm.length + 1.6));
+        if (fs2 >= (must ? 5 : 5.2) * u && bh >= fs2 * 1.6) {
+          fs = fs2; var icw = fs * 1.15, tw = nm.length * fs;
+          s += IC.group(IC.kind(st), c.x - (tw + icw * 1.25) / 2 + icw / 2, c.y, icw, must ? '#1d4a32' : '#5d7a66', null);
+          c = { x: c.x + icw * 0.625, y: c.y };
+        }
+      }
       s += '<text x="' + c.x + '" y="' + c.y + '" font-size="' + fs + '" text-anchor="middle" dominant-baseline="middle" fill="' + (must ? '#1f3b2a' : '#6b7568') + '"' + (must ? ' font-weight="700" paint-order="stroke" stroke="#fff" stroke-width="' + 2.2 * u + '"' : '') + '>' + esc(nm) + '</text>';
     });
     // 行き先
