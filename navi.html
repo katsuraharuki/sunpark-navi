@@ -26,13 +26,21 @@
     <input id="q" type="search" placeholder="店名・トイレなどで探す" autocomplete="off" enterkeyhint="search">
   </div>
 </div>
+<section id="device-location" class="device-location" aria-label="端末の位置">
+  <button type="button" class="device-location-toggle" id="location-toggle">端末の位置を測る</button>
+  <p class="device-location-status" id="location-status" role="status">屋内では測位がずれることがあります。案内の出発点はQRか手動で選びます。</p>
+  <div class="device-location-details" id="location-details" hidden>
+    <p id="location-coordinates"></p>
+    <p><span id="location-accuracy"></span><span id="location-updated"></span></p>
+  </div>
+</section>
 <main id="main"></main>
 <footer class="foot">
   <p>館内図・道順は、公式サイトのフロアマップから起こした目安です（現地確認前）。</p>
   <p><a href="staff.html">館の方へのご説明</a></p>
 </footer>
 <script src="mapdata.js"></script>
-<script src="icons.js"></script><script src="app.js"></script><script src="navi-sound.js"></script><script src="navi-voice.js"></script>
+<script src="icons.js"></script><script src="app.js"></script><script src="navi-sound.js"></script><script src="navi-voice.js"></script><script src="navi-location.js"></script>
 </body>
 </html>
 

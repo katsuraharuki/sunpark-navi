@@ -25,3 +25,10 @@
 .nzoom{position:absolute;right:10px;bottom:10px;display:flex;gap:2px;background:#fff;border-radius:999px;padding:3px;box-shadow:0 2px 8px #0000002a}
 .nzoom button{min-width:44px;min-height:44px;border:0;background:none;border-radius:999px;font-size:19px;color:#24302a;cursor:pointer}
 .nz-hint{font-size:13px;color:#3f4b43;margin:6px 0 0}
+
+.device-location{max-width:600px;margin:4px auto 12px;padding:0 16px;color:#3f4b43}
+.device-location-toggle{min-height:44px;padding:0 14px;border:1px solid var(--green);border-radius:8px;background:#fff;color:var(--green-d);font:inherit;font-size:14px;font-weight:700;cursor:pointer}
+.device-location-toggle:focus-visible{outline:3px solid #eb6b00;outline-offset:2px}
+.device-location-status,.device-location-details p{margin:5px 0 0;font-size:13px;line-height:1.55}
+.device-location-details p{font-variant-numeric:tabular-nums}
+.device-location-details span{display:inline-block;margin-right:12px}
