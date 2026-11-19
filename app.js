@@ -328,6 +328,80 @@
     return { order: legs.map(function (l) { return l.to; }), legs: legs, skipped: skipped,
       moves: legs.reduce(function (a, l) { return a + floorMoves(l.r); }, 0) };
   }
+  // ---------- いまの場所：見えているお店と向きから出す（声・文字） ----------
+  // 例「スタバが左に見える」→ スターバックスの前に立ち、店を左手に見る向き。
+  var SIDE_WORDS = [['ヒダリテ', 'left'], ['左手', 'left'], ['ヒダリ', 'left'], ['左', 'left'], ['ミギテ', 'right'], ['右手', 'right'], ['ミギ', 'right'], ['右', 'right'],
+    ['ショウメン', 'front'], ['正面', 'front'], ['メノマエ', 'front'], ['目の前', 'front'], ['目ノ前', 'front'], ['マンマエ', 'front'], ['真ん前', 'front'], ['マエ', 'front'], ['前', 'front'],
+    ['ウシロ', 'back'], ['後ろ', 'back'], ['後', 'back'], ['セナカ', 'back'], ['背中', 'back']].map(function (w) { return [norm(w[0]), w[1]]; });
+  var SIDE_JA = { left: '左手', right: '右手', front: '正面', back: '背中側' };
+  var keyOwners = {};
+  stores.forEach(function (s) { if (s.east || !s.polys.length || s.cat === 'トイレ') return; s.keys.forEach(function (k) { (keyOwners[k] = keyOwners[k] || {})[s.id] = 1; }); });
+  function lcs(a, b) { // いちばん長い共通の連続部分の長さと位置
+    var best = 0, at = -1, prev = new Array(b.length + 1).fill(0);
+    for (var i = 1; i <= a.length; i++) { var cur = new Array(b.length + 1).fill(0); for (var j = 1; j <= b.length; j++) if (a[i - 1] === b[j - 1]) { cur[j] = prev[j - 1] + 1; if (cur[j] > best) { best = cur[j]; at = i - best; } } prev = cur; }
+    return { len: best, at: at };
+  }
+  function whereFrom(raw) {
+    var T = norm(raw || ''); if (!T) return null;
+    var hits = [];
+    stores.forEach(function (s) {
+      if (s.east || !s.polys.length || s.cat === 'トイレ') return;
+      var best = null;
+      s.keys.forEach(function (k, ki) {
+        if (k.length < 2 || k === s.catKey || (ki !== 0 && Object.keys(keyOwners[k] || {}).length > 1)) return;
+        var at = T.indexOf(k), h = null;
+        if (at >= 0) h = { at: at, end: at + k.length, score: k.length + (ki === 0 ? 3 : 2) };
+        else if (k.length >= 4) { var m = lcs(T, k); if (m.len >= 3 && m.len >= k.length * 0.5) h = { at: m.at, end: m.at + m.len, score: m.len }; }
+        if (h && (!best || h.score > best.score)) best = h;
+      });
+      if (best) { best.s = s; hits.push(best); }
+    });
+    hits.sort(function (a, b) { return b.score - a.score; });
+    var picked = [];
+    hits.forEach(function (h) { if (picked.length < 2 && !picked.some(function (p) { return h.at < p.end && p.at < h.end || p.s.name === h.s.name; })) picked.push(h); });
+    if (!picked.length) return null;
+    picked.sort(function (a, b) { return a.at - b.at; });
+    // 向きの言葉：その店の名前のすぐ後ろ（次の店の名前より前）。無ければ前を見る（「左にスタバ」）
+    picked.forEach(function (h, i) {
+      var lim = i + 1 < picked.length ? picked[i + 1].at : T.length, from = i > 0 ? picked[i - 1].end : 0, after = null, before = null;
+      SIDE_WORDS.forEach(function (w) {
+        var p = T.indexOf(w[0], h.end); if (p >= 0 && p < lim && (!after || p < after.p)) after = { p: p, side: w[1] };
+        var q = T.lastIndexOf(w[0], h.at - 1); if (q >= from && q + w[0].length <= h.at && (!before || q > before.p)) before = { p: q, side: w[1] };
+      });
+      h.side = after ? after.side : before ? before.side : null;
+    });
+    var anchor = picked[0], other = picked[1] || null;
+    if (!anchor.side && other && other.side) { var t = anchor; anchor = other; other = t; }
+    return { storeId: anchor.s.id, side: anchor.side, otherId: other ? other.s.id : null, otherSide: other ? other.side : null };
+  }
+  // 店の前（door）から見て、店の正面の向き（区画の縁のいちばん近い所へ）
+  function towardStore(s) {
+    var p = s.door, best = null;
+    s.polys.forEach(function (poly) { for (var i = 0; i < poly.length; i++) { var a = poly[i], b = poly[(i + 1) % poly.length], dx = b[0] - a[0], dy = b[1] - a[1], L = dx * dx + dy * dy, t = L ? Math.max(0, Math.min(1, ((p.x - a[0]) * dx + (p.y - a[1]) * dy) / L)) : 0, q = { x: a[0] + dx * t, y: a[1] + dy * t }, d = Math.hypot(q.x - p.x, q.y - p.y); if (!best || d < best.d) best = { d: d, q: q }; } });
+    var v = best && best.d > 1 ? { x: best.q.x - p.x, y: best.q.y - p.y } : { x: s.c.x - p.x, y: s.c.y - p.y }, n = Math.hypot(v.x, v.y) || 1;
+    return { x: v.x / n, y: v.y / n };
+  }
+  function rot(v, side) { return side === 'left' ? { x: -v.y, y: v.x } : side === 'right' ? { x: v.y, y: -v.x } : side === 'back' ? { x: -v.x, y: -v.y } : { x: v.x, y: v.y }; }
+  // 向き（度）：店 s を side に見て立っている人が向いている方向。分からなければ null
+  function faceOf(storeId, side, otherId, otherSide) {
+    var s = storeById[storeId]; if (!s) return null;
+    var v = null;
+    if (side) v = rot(towardStore(s), side);
+    else if (otherId && otherSide && storeById[otherId] && storeById[otherId].floor === s.floor) {
+      var o = storeById[otherId], w = { x: o.c.x - s.door.x, y: o.c.y - s.door.y }, n = Math.hypot(w.x, w.y) || 1; v = rot({ x: w.x / n, y: w.y / n }, otherSide);
+    }
+    return v ? Math.round(Math.atan2(v.y, v.x) * 180 / Math.PI) : null;
+  }
+  // 最初の歩きカードの頭に「いまの向きから、どちらへ」を足す
+  function faceTurnWord(deg, pts) {
+    if (deg == null || !pts || pts.length < 2) return '';
+    var a = pts[0], b = pts[Math.min(2, pts.length - 1)], r = deg * Math.PI / 180;
+    var t = turnDeg([Math.cos(r), Math.sin(r)], hd(a, b)), A = Math.abs(t);
+    if (A < 40) return 'いま向いている方へまっすぐ、';
+    if (A > 140) return '後ろへ振り返って、';
+    return (t > 0 ? '右' : '左') + 'を向いて、';
+  }
+
   // 館内QR：?here=<入口ID> を入口に解決する（知らないIDは null）
   function hereFrom(search) {
     var id; try { id = new URLSearchParams(search || '').get('here'); } catch (e) { return null; }
@@ -335,7 +409,7 @@
   }
 
   var Nav = { M: M, stores: stores, storeById: storeById, search: search, route: route, cards: cards, starts: starts, lifts: lifts, norm: norm,
-    startById: startById, routeFromPoint: routeFromPoint, pointOf: pointOf, legOf: legOf, courseLegs: courseLegs, courseOrder: courseOrder, floorMoves: floorMoves, hereFrom: hereFrom, CELL: CELL,
+    startById: startById, routeFromPoint: routeFromPoint, pointOf: pointOf, legOf: legOf, courseLegs: courseLegs, courseOrder: courseOrder, floorMoves: floorMoves, hereFrom: hereFrom, whereFrom: whereFrom, faceOf: faceOf, faceTurnWord: faceTurnWord, CELL: CELL,
     PUBLIC_URL: 'https://katsuraharuki.github.io/sunpark-navi/index.html' };
   if (typeof module !== 'undefined' && module.exports) { module.exports = Nav; return; }
   window.Nav = Nav;
@@ -343,7 +417,7 @@
 
   // ======================= 画面 =======================
   var $ = function (id) { return document.getElementById(id); };
-  var state = { from: null, to: null, stepFree: false, idx: 0, mapFloor: 1, r: null, cards: null, q: '', course: null, cl: 0, legs: null, nz: null };
+  var state = { from: null, to: null, stepFree: false, idx: 0, mapFloor: 1, r: null, cards: null, q: '', course: null, cl: 0, legs: null, nz: null, face: null, here: null, hereText: '', hereMsg: '' };
   var REDUCED = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
   // いまの区間の出発点（コースの2区間目からは、前の店の前）
   function legStart() { return state.course && state.cl > 0 ? pointOf(state.course[state.cl - 1]) : pointOf(state.from); }
@@ -352,7 +426,9 @@
 
   function readUrl() {
     var q = new URLSearchParams(location.search);
-    if (startById[q.get('from')]) state.from = q.get('from');
+    var fq = q.get('from');
+    if (startById[fq] || (storeById[fq] && !storeById[fq].east && storeById[fq].polys.length)) state.from = fq;
+    var fc = parseInt(q.get('face'), 10); state.face = state.from && !startById[state.from] && isFinite(fc) ? fc : null;
     var to = q.get('to');
     if (to) { var hit = stores.filter(function (s) { return s.name === to; })[0]; if (hit) state.to = hit.id; }
     state.stepFree = q.get('stepfree') === '1';
@@ -362,23 +438,32 @@
   function writeUrl() {
     var q = new URLSearchParams();
     if (state.from) q.set('from', state.from);
+    if (state.from && !startById[state.from] && state.face != null) q.set('face', String(state.face));
     if (state.course) { q.set('course', state.course.join(',')); q.set('leg', String(state.cl)); }
     else if (state.to) q.set('to', storeById[state.to].name);
     if (state.stepFree) q.set('stepfree', '1');
     var s = q.toString();
     try { history.replaceState(null, '', location.pathname + (s ? '?' + s : '')); } catch (e) { /* file:// など */ }
   }
+  function applyFace() { // 見えている店から出した向きを、最初の案内文と地図に反映する
+    if (state.face == null || startById[state.from]) return;
+    var cs = state.course ? (state.legs && state.legs[0] && state.legs[0].cards) : state.cards, c = cs && cs[0];
+    if (!c || c.kind !== 'walk' || c.faced) return;
+    var head = storeById[state.from].name + 'の前から、', w = faceTurnWord(state.face, c.pts);
+    if (w && c.text.indexOf(head) === 0) { c.text = head + w + c.text.slice(head.length); c.faced = true; }
+  }
   function compute() {
     state.r = null; state.cards = null; state.idx = 0;
     if (state.course) {
       state.legs = state.from ? courseLegs(state.from, state.course, state.stepFree) : null;
       state.to = state.course[state.cl];
+      applyFace();
       if (state.legs) { var lg = state.legs[state.cl]; state.r = lg.r; state.cards = lg.cards; state.mapFloor = state.cards[0].floor; }
       return;
     }
     if (!state.from || !state.to || storeById[state.to].east) return;
-    state.r = route(state.from, state.to, state.stepFree);
-    if (state.r) { state.cards = cards(state.r, storeById[state.to], state.from); state.mapFloor = state.cards[0].floor; }
+    var lg0 = legOf(state.from, state.to, state.stepFree);
+    if (lg0) { state.r = lg0.r; state.cards = lg0.cards; applyFace(); state.mapFloor = state.cards[0].floor; }
   }
 
   // ---------- 検索の画面 ----------
@@ -410,15 +495,122 @@
   function bind(sel, fn) { Array.prototype.forEach.call(document.querySelectorAll(sel), function (b) { b.addEventListener('click', function () { fn(b); }); }); }
   function choose(id) { state.to = id; state.q = ''; $('q').value = ''; writeUrl(); compute(); render(); window.scrollTo(0, 0); }
 
+  // ---------- 見えているお店から、いまの場所を出す ----------
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  function hereBox() {
+    return '<section class="here" aria-label="近くのお店から場所を出す">' +
+      '<p class="here-lead">近くに見えるお店と、<b>見えている向き</b>を教えてください。</p>' +
+      '<p class="here-ex">例：「スタバが左に見える」「ユニクロが正面」</p>' +
+      (SR ? '<button type="button" id="here-mic" class="here-mic"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>話して教える</span></button>' : '') +
+      '<div class="here-row"><input id="here-q" type="text" placeholder="文字でも：スタバが左" enterkeyhint="go" autocomplete="off" value="' + esc(state.hereText || '') + '">' +
+      '<button type="button" id="here-go" class="here-go">場所を出す</button></div>' +
+      '<p id="here-msg" class="here-msg" role="status">' + esc(state.hereMsg || '') + '</p></section>';
+  }
+  function locate(texts) {
+    var r = null, used = '';
+    for (var i = 0; i < texts.length && !r; i++) { r = whereFrom(texts[i]); used = texts[i]; }
+    state.hereText = used || texts[0] || '';
+    if (!r) {
+      state.hereMsg = 'お店の名前が分かりませんでした。看板に書いてある名前で、もう一度教えてください。';
+      render(); var m = $('here-msg'); if (m) m.classList.add('ng'); return;
+    }
+    state.hereMsg = '';
+    state.here = { storeId: r.storeId, side: r.side, otherId: r.otherId, otherSide: r.otherSide };
+    render(); var hq = document.querySelector('#main .q'); if (hq && hq.scrollIntoView) hq.scrollIntoView(); else window.scrollTo(0, 0);
+  }
+  function bindHere() {
+    var input = $('here-q'), go = $('here-go'), mic = $('here-mic');
+    if (!input) return;
+    go.addEventListener('click', function () { if (input.value.trim()) locate([input.value.trim()]); else input.focus(); });
+    input.addEventListener('keydown', function (e) { if (e.key === 'Enter' && input.value.trim()) locate([input.value.trim()]); });
+    if (!mic) return;
+    var rec = null;
+    mic.addEventListener('click', function () {
+      if (rec) { rec.stop(); return; }
+      try { rec = new SR(); } catch (e) { rec = null; return; }
+      rec.lang = 'ja-JP'; rec.interimResults = true; rec.maxAlternatives = 3; rec.continuous = false;
+      var done = false, msg = $('here-msg');
+      mic.classList.add('on'); mic.querySelector('span').textContent = '聞いています…（もう一度押すと止まります）';
+      msg.classList.remove('ng'); msg.textContent = '「スタバが左に見える」のように話してください。';
+      rec.onresult = function (e) {
+        var res = e.results[e.results.length - 1]; input.value = res[0].transcript;
+        if (res.isFinal && !done) { done = true; var alts = []; for (var i = 0; i < res.length; i++) alts.push(res[i].transcript); rec.stop(); locate(alts); }
+      };
+      rec.onerror = function (e) {
+        msg.classList.add('ng');
+        msg.textContent = e.error === 'not-allowed' || e.error === 'service-not-allowed' ? 'マイクが使えません。ブラウザのサイト設定でマイクを許可するか、文字で入力してください。'
+          : e.error === 'no-speech' ? '声が聞こえませんでした。もう一度押して話すか、文字で入力してください。' : '聞き取れませんでした。文字で入力してください。';
+      };
+      rec.onend = function () { rec = null; var b = $('here-mic'); if (b) { b.classList.remove('on'); b.querySelector('span').textContent = '話して教える'; } };
+      try { rec.start(); } catch (e) { rec = null; mic.classList.remove('on'); }
+    });
+  }
+  function renderHere() {
+    var h = state.here, s = storeById[h.storeId], face = faceOf(h.storeId, h.side, h.otherId, h.otherSide), o = h.otherId ? storeById[h.otherId] : null;
+    var nm = s.name.replace(/・Standard Products/, ''), html = destHead(storeById[state.to]);
+    html += '<h2 class="h q">いまの場所は、ここですか？</h2><section class="here-card">';
+    html += '<p class="here-say">' + esc(s.floor + 'F・' + nm) + 'の前' + (h.side ? 'で、お店を<b>' + SIDE_JA[h.side] + '</b>に見ています。' : face != null && o ? 'で、' + esc(o.name) + 'を<b>' + SIDE_JA[h.otherSide] + '</b>に見ています。' : 'にいます。') + '</p>';
+    html += '<div class="here-map">' + hereMap(s, face, o) + '</div>';
+    html += '<p class="here-legend">' + (face != null ? '緑の矢印が、いまあなたが向いている方向です。' : '緑の丸が、いまいる所です。お店がどちらに見えるか選ぶと、向きも出ます。') + '</p>';
+    html += '<p class="here-sideq">' + esc(nm) + 'は、どちらに見えますか？</p><div class="here-sides" role="group">' +
+      ['left', 'front', 'right', 'back'].map(function (k) { return '<button type="button" class="here-side' + (h.side === k ? ' on' : '') + '" data-side="' + k + '">' + { left: '左', front: '正面', right: '右', back: '後ろ' }[k] + '</button>'; }).join('') + '</div>';
+    html += '<div class="nav"><button id="here-retry" class="btn">言い直す</button><button id="here-ok" class="btn primary">ここから案内</button></div></section>';
+    $('main').innerHTML = html;
+    bind('.here-side', function (b) { h.side = b.getAttribute('data-side'); render(); });
+    $('here-retry').addEventListener('click', function () { state.here = null; render(); setTimeout(function () { var i = $('here-q'); if (i) i.focus(); }, 0); });
+    $('here-ok').addEventListener('click', function () { state.from = h.storeId; state.face = face; state.here = null; state.hereText = ''; writeUrl(); compute(); render(); window.scrollTo(0, 0); });
+    bindDestHead();
+  }
+  function hereMap(s, face, o) {
+    var fl = s.floor, W = 300, H = 230, vb = { x: s.door.x - W / 2, y: s.door.y - H / 2, w: W, h: H }, u = W / 360;
+    var t = '<svg viewBox="' + [vb.x, vb.y, vb.w, vb.h].map(Math.round).join(' ') + '" role="img" aria-label="いまの場所の地図">';
+    t += '<polygon points="' + pp(G[fl].outline) + '" fill="#fff" stroke="#b9c2b5" stroke-width="' + 1.4 * u + '"/>';
+    (M.floors[fl].voids || []).forEach(function (p) { t += '<polygon points="' + pp(p) + '" fill="#e4ebf1" stroke="#c3cfda" stroke-width="' + 0.7 * u + '"/>'; });
+    (M.unnamed[fl] || []).forEach(function (p) { t += '<polygon points="' + pp(p) + '" fill="#eef1ec" stroke="#d9ded5" stroke-width="' + 0.6 * u + '"/>'; });
+    stores.forEach(function (st) {
+      if (st.floor !== fl || !st.polys.length) return;
+      var key = st.id === s.id || (o && st.id === o.id);
+      st.polys.forEach(function (p) { t += '<polygon points="' + pp(p) + '" fill="' + (key ? '#cfe9d6' : '#f1f6e9') + '" stroke="' + (key ? '#00a040' : '#c9d6b8') + '" stroke-width="' + (key ? 1.8 : 0.7) * u + '"/>'; });
+    });
+    stores.forEach(function (st) {
+      if (st.floor !== fl || !st.polys.length) return;
+      var poly = st.polys[0], c = centroid(poly), key = st.id === s.id || (o && st.id === o.id);
+      if (c.x < vb.x - 20 || c.x > vb.x + W + 20 || c.y < vb.y - 20 || c.y > vb.y + H + 20) return;
+      var xs = poly.map(function (p) { return p[0]; }), ys = poly.map(function (p) { return p[1]; });
+      var bw = Math.max.apply(null, xs) - Math.min.apply(null, xs), bh = Math.max.apply(null, ys) - Math.min.apply(null, ys);
+      var nm = st.name.replace(/（.*?）|・Standard Products/g, ''), fs = Math.min(9 * u, bw / (nm.length * 1.0));
+      if (!key && (fs < 5.2 * u || bh < 7 * u)) return;
+      if (key) fs = Math.max(fs, 8 * u);
+      t += '<text x="' + c.x + '" y="' + c.y + '" font-size="' + fs + '" text-anchor="middle" dominant-baseline="middle" fill="' + (key ? '#0d4a26' : '#6b7568') + '"' + (key ? ' font-weight="700" paint-order="stroke" stroke="#fff" stroke-width="' + 2.4 * u + '"' : '') + '>' + esc(nm) + '</text>';
+    });
+    t += youAreHere(s.door, face, u, 'いまここ', s.id);
+    return t + '</svg>';
+  }
+  // いまいる所の印：緑の丸＋向いている方向の矢印（向きが分からない時は丸だけ）
+  function youAreHere(p, face, u, label, sid) {
+    var t = '';
+    if (face != null) {
+      var r = face * Math.PI / 180, cx = Math.cos(r), cy = Math.sin(r), nx = -cy, ny = cx, L = 50 * u, B = 15 * u;
+      var tip = { x: p.x + cx * L, y: p.y + cy * L };
+      t += '<path d="M' + (p.x + nx * B) + ',' + (p.y + ny * B) + ' L' + tip.x + ',' + tip.y + ' L' + (p.x - nx * B) + ',' + (p.y - ny * B) + ' z" fill="#00a040" fill-opacity=".28"/>';
+      t += '<path d="M' + (p.x + cx * 24 * u + nx * 11 * u) + ',' + (p.y + cy * 24 * u + ny * 11 * u) + ' L' + tip.x + ',' + tip.y + ' L' + (p.x + cx * 24 * u - nx * 11 * u) + ',' + (p.y + cy * 24 * u - ny * 11 * u) + ' z" fill="#00a040" stroke="#fff" stroke-width="' + 1.6 * u + '" stroke-linejoin="round"/>';
+    }
+    t += '<circle cx="' + p.x + '" cy="' + p.y + '" r="' + 8 * u + '" fill="#fff" stroke="#00a040" stroke-width="' + 3.4 * u + '"/><circle cx="' + p.x + '" cy="' + p.y + '" r="' + 3.6 * u + '" fill="#00a040"/>';
+    var lx = p.x, ly = face != null && Math.sin(face * Math.PI / 180) > 0.5 ? p.y - 15 * u : p.y + 21 * u;
+    if (sid && storeById[sid]) { var tv = towardStore(storeById[sid]); lx = p.x - tv.x * 20 * u; ly = p.y - tv.y * 17 * u + 3 * u; if (Math.abs(tv.x) > 0.7) ly = p.y - 13 * u; }
+    t += '<text x="' + lx + '" y="' + ly + '" font-size="' + 9 * u + '" font-weight="700" text-anchor="middle" fill="#007a30" paint-order="stroke" stroke="#fff" stroke-width="' + 2.6 * u + '">' + label + '</text>';
+    return t;
+  }
+
   // ---------- 出発点の画面 ----------
   function renderStart() {
     var d = storeById[state.to];
-    var html = destHead(d) + '<h2 class="h q">いまどこにいますか？</h2><div class="starts">';
+    var html = destHead(d) + '<h2 class="h q">いまどこにいますか？</h2>' + hereBox() + '<p class="starts-h">入口にいる方は、ここから選ぶ</p><div class="starts">';
     starts.forEach(function (s) { html += '<button class="start-btn" data-from="' + s.id + '"><span class="fl-badge">' + s.floor + 'F</span>' + esc(s.label.replace(/^[12]F /, '')) + '</button>'; });
     html += '</div><p class="hint">館内のQRシールを読み取ると、この質問は省かれます。</p>';
     $('main').innerHTML = html;
-    bind('.start-btn', function (b) { state.from = b.getAttribute('data-from'); writeUrl(); compute(); render(); });
-    bindDestHead();
+    bind('.start-btn', function (b) { state.from = b.getAttribute('data-from'); state.face = null; writeUrl(); compute(); render(); });
+    bindHere(); bindDestHead();
   }
   function destHead(d) {
     return '<div class="dest"><span class="dest-pin" aria-hidden="true"></span><div class="dest-body"><p class="dest-label">行き先</p>' +
@@ -631,7 +823,8 @@
     }
     // 出発
     var st0 = legStart();
-    if (st0.floor === fl) {
+    if (st0.floor === fl && !st0.entrance && state.face != null && !(state.course && state.cl > 0)) s += youAreHere(st0, state.face, u, 'いまここ', st0.storeId);
+    else if (st0.floor === fl) {
       s += '<circle cx="' + st0.x + '" cy="' + st0.y + '" r="' + 8 * u + '" fill="#fff" stroke="#00a040" stroke-width="' + 3.4 * u + '"/>';
       s += '<text x="' + st0.x + '" y="' + (st0.y + 19 * u) + '" font-size="' + 9 * u + '" font-weight="700" text-anchor="middle" fill="#007a30" paint-order="stroke" stroke="#fff" stroke-width="' + 2.4 * u + '">出発</text>';
     }
@@ -664,7 +857,7 @@
   function render() {
     if (!state.to) renderHome();
     else if (storeById[state.to].east) renderEast();
-    else if (!state.from) renderStart();
+    else if (!state.from) { if (state.here) renderHere(); else renderStart(); }
     else if (state.cards) renderRoute();
     else { $('main').innerHTML = destHead(storeById[state.to]) + '<p class="card-text">道順が見つかりませんでした。</p><p><button class="link" id="change-from">出発点を選び直す</button></p>'; $('change-from').addEventListener('click', function () { state.from = null; writeUrl(); render(); }); bindDestHead(); }
     document.body.classList.toggle('routing', !!state.to);

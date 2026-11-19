@@ -32,3 +32,32 @@
 .device-location-status,.device-location-details p{margin:5px 0 0;font-size:13px;line-height:1.55}
 .device-location-details p{font-variant-numeric:tabular-nums}
 .device-location-details span{display:inline-block;margin-right:12px}
+
+/* 見えているお店から、いまの場所を出す（2026-11-19） */
+.here{border:1px solid var(--line);border-radius:14px;padding:14px;background:var(--soft);margin:0 0 18px}
+.here-lead{margin:0;font-size:15px;font-weight:700}
+.here-lead b{color:var(--green-d)}
+.here-ex{margin:2px 0 10px;font-size:13px;color:var(--sub)}
+.here-mic{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;font-size:17px;font-weight:700;padding:14px;border:0;border-radius:12px;background:var(--green);color:#fff;cursor:pointer;margin-bottom:10px}
+.here-mic svg{width:22px;height:22px}
+.here-mic.on{background:#fff;color:var(--green-d);box-shadow:inset 0 0 0 2px var(--green);animation:here-pulse 1.2s ease-in-out infinite}
+@keyframes here-pulse{50%{box-shadow:inset 0 0 0 2px var(--green),0 0 0 6px rgba(0,160,64,.18)}}
+@media (prefers-reduced-motion:reduce){.here-mic.on{animation:none}}
+.here-row{display:flex;gap:8px}
+.here-row input{flex:1;min-width:0;font:inherit;font-size:16px;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:#fff}
+.here-row input:focus{outline:2px solid var(--green);outline-offset:0;border-color:var(--green)}
+.here-go{flex:none;font-size:15px;font-weight:700;padding:0 14px;border:1px solid var(--green);color:var(--green-d);background:#fff;border-radius:10px;cursor:pointer}
+.here-msg{margin:8px 0 0;font-size:13px;color:var(--sub);min-height:0}
+.here-msg:empty{display:none}
+.here-msg.ng{color:#b3261e;font-weight:700}
+.starts-h{font-size:13px;color:var(--sub);margin:0 0 8px;font-weight:700}
+.here-card{border:1px solid var(--line);border-radius:14px;padding:14px;background:#fff}
+.here-say{margin:0 0 10px;font-size:16px;font-weight:700;line-height:1.6}
+.here-say b{color:var(--green-d)}
+.here-map{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#f7f9f5}
+.here-map svg{display:block;width:100%;height:auto}
+.here-legend{font-size:12px;color:var(--sub);margin:6px 0 12px}
+.here-sideq{font-size:14px;font-weight:700;margin:0 0 6px}
+.here-sides{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:14px}
+.here-side{font-size:15px;font-weight:700;padding:10px 0;border:1px solid var(--line);border-radius:10px;background:#fff;cursor:pointer}
+.here-side.on{background:var(--green);border-color:var(--green);color:#fff}
