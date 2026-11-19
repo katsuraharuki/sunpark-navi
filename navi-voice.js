@@ -7,7 +7,6 @@
   try { on = sessionStorage.getItem('sunpark-voice') === 'true'; } catch (e) {}
   var main = document.getElementById('main'); if (!main) return;
   var bar = document.createElement('div'); bar.className = 'voice-bar'; bar.hidden = true;
-  main.parentNode.insertBefore(bar, main);
 
   function pickVoice() {
     var vs = synth.getVoices() || [];
@@ -30,8 +29,10 @@
   function save() { try { sessionStorage.setItem('sunpark-voice', String(on)); } catch (e) {} }
   function render() {
     var c = current();
-    bar.hidden = !(c && voice);
+    var slot = document.getElementById('route-voice-setting');
+    bar.hidden = !(slot && c && voice);
     if (bar.hidden) return;
+    if (bar.parentNode !== slot) slot.appendChild(bar);
     bar.classList.toggle('prominent', !!document.querySelector('#main .seg.on[data-sf="1"]'));
     var html = on
       ? '<button type="button" id="voice-toggle" class="voice-btn on" aria-pressed="true">声で案内 ON</button><button type="button" id="voice-again" class="voice-again">もう一度聞く</button>'

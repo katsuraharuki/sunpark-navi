@@ -266,3 +266,50 @@ main.staff footer{padding-left:0;padding-right:0}
 
 .map-location-link{display:inline-flex;align-items:center;align-self:flex-start;min-height:44px;margin:10px 0;padding:0 14px;border:1px solid #ffffff80;border-radius:8px;color:#fff;font-size:14px;font-weight:700;text-decoration:none}
 .map-location-link:hover,.map-location-link:focus-visible{background:#fff;color:#005b2e}
+
+/* 現在地を選ぶ共通パネル */
+.here{border:1px solid var(--line);border-radius:14px;padding:14px;background:var(--soft);margin:0 0 18px}
+.here-lead{margin:0;font-size:15px;font-weight:700}
+.here-lead b{color:var(--green-d)}
+.here-ex{margin:2px 0 10px;font-size:13px;color:var(--sub)}
+.here-mic{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;font-size:17px;font-weight:700;padding:14px;border:0;border-radius:12px;background:var(--green);color:#fff;cursor:pointer;margin-bottom:10px}
+.here-mic svg{width:22px;height:22px}
+.here-mic.on{background:#fff;color:var(--green-d);box-shadow:inset 0 0 0 2px var(--green);animation:here-pulse 1.2s ease-in-out infinite}
+@keyframes here-pulse{50%{box-shadow:inset 0 0 0 2px var(--green),0 0 0 6px rgba(0,160,64,.18)}}
+@media (prefers-reduced-motion:reduce){.here-mic.on{animation:none}}
+.here-row{display:flex;gap:8px}
+.here-row input{flex:1;min-width:0;font:inherit;font-size:16px;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:#fff}
+.here-row input:focus{outline:2px solid var(--green);outline-offset:0;border-color:var(--green)}
+.here-go{flex:none;font-size:15px;font-weight:700;padding:0 14px;border:1px solid var(--green);color:var(--green-d);background:#fff;border-radius:10px;cursor:pointer}
+.here-msg{margin:8px 0 0;font-size:13px;color:var(--sub);min-height:0}
+.here-msg:empty{display:none}
+.here-msg.ng{color:#b3261e;font-weight:700}
+.starts-h{font-size:13px;color:var(--sub);margin:0 0 8px;font-weight:700}
+.here-card{border:1px solid var(--line);border-radius:14px;padding:14px;background:#fff}
+.here-say{margin:0 0 10px;font-size:16px;font-weight:700;line-height:1.6}
+.here-say b{color:var(--green-d)}
+.here-map{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#f7f9f5}
+.here-map svg{display:block;width:100%;height:auto}
+.here-legend{font-size:12px;color:var(--sub);margin:6px 0 12px}
+.here-sideq{font-size:14px;font-weight:700;margin:0 0 6px}
+.here-sides{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:14px}
+.here-side{font-size:15px;font-weight:700;padding:10px 0;border:1px solid var(--line);border-radius:10px;background:#fff;cursor:pointer}
+.here-side.on{background:var(--green);border-color:var(--green);color:#fff}
+
+
+.location-panel{margin:12px 0;padding:16px;border:1px solid var(--line);border-radius:14px;background:#fff;color:var(--ink)}
+.location-panel button{min-height:44px}
+.location-panel input{max-width:100%}
+.location-panel .btn{width:100%;min-height:48px;border:1px solid var(--green);border-radius:10px;padding:12px;background:var(--green);color:#fff;font:inherit;font-weight:700}
+.location-panel .here-map svg{max-height:45vh}
+
+/* 検索と現在地を、一列の読み順で使う。 */
+.sky-in #current-location{max-width:640px;margin:12px 0 0;scroll-margin-top:16px}
+.sky-in #current-location .location-panel{margin:0;padding:12px 14px;background:#ffffffed}
+.sky-in #current-location .here{margin-bottom:0}
+.sky-in #current-location .here-lead{font-size:15px}
+.sky-in #current-location .here-row{flex-wrap:wrap}
+.sky-in #current-location .here-row input{flex-basis:180px}
+.sky-in #current-location .here-go{min-height:44px}
+@media(max-width:700px){.sky-in{padding-bottom:32px}.sky-in #current-location{margin-top:10px}.sky-in .shortcuts{margin-top:12px}.sky-in #current-location .here-sides{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.sky-photo,.inside-photo{pointer-events:none}

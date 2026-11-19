@@ -7,10 +7,10 @@
 <header class="site-head"><a class="brand" href="index.html">おのだサンパーク</a><span class="demo">非公式デモ</span><a class="staff-link" href="staff.html">館の方へ</a><button id="sound" aria-pressed="false">効果音 OFF</button></header>
 <div class="sky-in">
 <h1 id="sky-title">おのだサンパーク<br><span>館内ナビ</span></h1>
-<p class="about-line">本館のお店を探して、入口からの道順をスマホで見られます。</p>
+<p class="about-line">近くに見えるお店から、行きたいお店までご案内します。</p>
 <label class="search"><span class="sr-only">店名を検索</span><input id="query" type="search" placeholder="店名・トイレなどを検索" enterkeyhint="search"><span aria-hidden="true">⌕</span></label>
+<div id="current-location" aria-label="現在地"></div>
 <div class="shortcuts" role="group" aria-label="近道"><button data-short="トイレ">トイレ</button><button data-short="エレベーター">エレベーター</button><button data-short="銀行・ATM">ATM</button><button data-short="案内所">案内所</button><button id="surprise" class="ghost">おまかせ</button></div>
-<p class="sky-note">非公式の見本・公式フロア図から起こした目安（現地未確認）</p>
 </div>
 <p class="credit">写真：おのだサンパーク公式サイトより（提案用に一時借用）</p>
 </section>
@@ -19,8 +19,7 @@
 <section class="ch ch-inside" id="inside" aria-labelledby="inside-title">
 <div class="inside-photo" aria-hidden="true"></div>
 <div class="ch-head"><h2 id="inside-title">館の中へ</h2><p>1F と 2F。区画を押すと、そのお店へ。</p></div>
-<div class="map-stage"><div class="map-caption"><strong id="map-title">気になる場所を、ひとつ。</strong></div><div id="map" class="map"></div><div class="floor-switch" aria-label="表示する階"><button data-floor="1" aria-pressed="true">1F</button><button data-floor="2" aria-pressed="false">2F</button></div><span class="map-note">公式フロア図から起こした目安</span></div>
-<a class="map-location-link" href="navi.html#device-location">現在地を確認</a>
+<div class="map-stage"><div class="map-caption"><strong id="map-title">気になる場所を、ひとつ。</strong></div><div id="map" class="map"></div><div class="floor-switch" aria-label="表示する階"><button data-floor="1" aria-pressed="true">1F</button><button data-floor="2" aria-pressed="false">2F</button></div></div>
 <div class="try-phone" id="try-phone" hidden><div class="qr" aria-label="スマホで開くためのQRコード"></div><p>スマホで試す<small>読み取ると、この見本がスマホで開きます</small></p></div>
 <p class="credit dark">写真：おのだサンパーク公式サイトより（提案用に一時借用）</p>
 </section>
@@ -38,11 +37,11 @@
 </section>
 
 <section class="ch ch-staff" aria-labelledby="faq-title">
-<h2 id="faq-title">聞きたいことがある時</h2><p>「お土産はどこ？」「駐車場は？」「薬が欲しい」など、インフォメーションでよく聞かれることにお答えし、そのままお店まで案内します。</p><a class="primary" href="faq/">質問する <span>→</span></a>
+<h2 id="faq-title">聞きたいことがある時</h2><p>お土産・駐車場・お薬など、よくある質問から探せます。</p><a class="primary" href="faq/">質問する <span>→</span></a>
 </section>
 
 <section class="ch ch-staff" aria-labelledby="staff-title">
-<h2 id="staff-title">館の方へ</h2><p>この見本で館に期待できること、館内QRの印刷用ページ、スタッフ用の避難誘導の見本。</p><a class="primary" href="staff.html">ご説明を見る <span>→</span></a> <a class="primary" href="evac/">避難誘導（スタッフ用） <span>→</span></a>
+<h2 id="staff-title">館の方へ</h2><p>導入のご説明と入口QR。避難誘導はスタッフ用です。</p><a class="primary" href="staff.html">ご説明を見る <span>→</span></a> <a class="primary" href="evac/">避難誘導（スタッフ用） <span>→</span></a>
 </section>
 <footer><strong>おのだサンパーク</strong><p>公式サイトではない、館内ナビの見本です。店舗・館内図・道順は公式フロア図から起こした目安（現地未確認）。</p></footer>
 </main>

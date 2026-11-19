@@ -292,8 +292,8 @@
   }
   // 出発点：入口ID または 店ID（その店の前）
   function pointOf(id) {
-    if (startById[id]) { var s = startById[id]; return { floor: s.floor, x: s.x, y: s.y, label: s.label, entrance: true }; }
-    var st = storeById[id];
+    if (Object.prototype.hasOwnProperty.call(startById,id)) { var s = startById[id]; return { floor: s.floor, x: s.x, y: s.y, label: s.label, entrance: true }; }
+    var st = Object.prototype.hasOwnProperty.call(storeById,id) ? storeById[id] : null;
     if (st && !st.east) return { floor: st.floor, x: st.door.x, y: st.door.y, label: st.name + 'の前', entrance: false, storeId: st.id };
     return null;
   }
@@ -405,7 +405,7 @@
   // 館内QR：?here=<入口ID> を入口に解決する（知らないIDは null）
   function hereFrom(search) {
     var id; try { id = new URLSearchParams(search || '').get('here'); } catch (e) { return null; }
-    return id && startById[id] ? id : null;
+    return id && Object.prototype.hasOwnProperty.call(startById,id) ? id : null;
   }
 
   var Nav = { M: M, stores: stores, storeById: storeById, search: search, route: route, cards: cards, starts: starts, lifts: lifts, norm: norm,
@@ -413,57 +413,409 @@
     PUBLIC_URL: 'https://katsuraharuki.github.io/sunpark-navi/index.html' };
   if (typeof module !== 'undefined' && module.exports) { module.exports = Nav; return; }
   window.Nav = Nav;
+  var locationKey = "sunpark-location";
+  function validLocation(v) {
+    if (
+      !v ||
+      !(
+        Object.prototype.hasOwnProperty.call(startById, v.from) ||
+        Object.prototype.hasOwnProperty.call(storeById, v.from)
+      ) ||
+      !pointOf(v.from) ||
+      (!startById[v.from] &&
+        (!storeById[v.from].polys.length || storeById[v.from].east))
+    )
+      return null;
+    return {
+      from: v.from,
+      face:
+        !startById[v.from] && typeof v.face === "number" && isFinite(v.face)
+          ? ((v.face % 360) + 360) % 360
+          : null,
+    };
+  }
+  function saveLocation(v) {
+    v = validLocation(v);
+    try {
+      if (v) sessionStorage.setItem(locationKey, JSON.stringify(v));
+      else sessionStorage.removeItem(locationKey);
+      sessionStorage.removeItem("sunpark-here");
+    } catch (e) {}
+    return v;
+  }
+  function readLocation() {
+    var q = new URLSearchParams(location.search),
+      qr = hereFrom(location.search),
+      v;
+    if (qr) return saveLocation({ from: qr, face: null });
+    v = validLocation({
+      from: q.get("from"),
+      face:
+        q.has("face") && q.get("face").trim() !== ""
+          ? Number(q.get("face"))
+          : null,
+    });
+    if (v) return saveLocation(v);
+    try {
+      v = validLocation(JSON.parse(sessionStorage.getItem(locationKey)));
+      if (!v) {
+        var old = hereFrom(
+          "?here=" + (sessionStorage.getItem("sunpark-here") || ""),
+        );
+        if (old) v = saveLocation({ from: old, face: null });
+      }
+    } catch (e) {}
+    return v || null;
+  }
+  var currentLocation = readLocation();
+  Nav.location = {
+    get: function () {
+      return currentLocation;
+    },
+    refresh: function () { try {currentLocation=validLocation(JSON.parse(sessionStorage.getItem(locationKey)));}catch(e){} return currentLocation; },
+    set: function (v) {
+      currentLocation = saveLocation(v);
+      return currentLocation;
+    },
+    label: function (v) {
+      var p = v && pointOf(v.from);
+      return p ? p.label : "";
+    },
+    query: function (v) {
+      return v
+        ? "&from=" +
+            encodeURIComponent(v.from) +
+            (v.face != null ? "&face=" + v.face : "")
+        : "";
+    },
+  };
+  Nav.locationMap = function (v) {
+    var p = v && pointOf(v.from);
+    if (!p) return "";
+    var st = storeById[v.from],
+      x = p.x,
+      y = p.y,
+      t =
+        '<svg viewBox="' +
+        [x - 150, y - 100, 300, 200].join(" ") +
+        '" role="img" aria-label="現在地と向きの目安">';
+    stores
+      .filter(function (a) {
+        return a.floor === p.floor;
+      })
+      .forEach(function (a) {
+        a.polys.forEach(function (poly) {
+          t +=
+            '<polygon points="' +
+            poly
+              .map(function (q) {
+                return q.join(",");
+              })
+              .join(" ") +
+            '" fill="' +
+            (st && a.id === st.id ? "#b8dac5" : "#eef2e9") +
+            '" stroke="#acbaa5"/>';
+        });
+      });
+    t +=
+      '<circle cx="' +
+      x +
+      '" cy="' +
+      y +
+      '" r="9" fill="#007a30" stroke="white" stroke-width="3"/>';
+    if (v.face != null)
+      t +=
+        '<path d="M ' +
+        x +
+        " " +
+        y +
+        ' l 40 0 m -12 -8 l 12 8 -12 8" fill="none" stroke="#007a30" stroke-width="5" transform="rotate(' +
+        v.face +
+        " " +
+        x +
+        " " +
+        y +
+        ')"/>';
+    return t + "</svg>";
+  };
+  Nav.mountLocation = function (host, onChange, edit) {
+    var val = Nav.location.get(),
+      SR = window.SpeechRecognition || window.webkitSpeechRecognition,
+      recognition = null;
+    function esc(t) {
+      return String(t).replace(/[&<>"']/g, function (c) {
+        return {
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;",
+        }[c];
+      });
+    }
+    function commit(v) {
+      if (recognition) recognition.abort();
+      Nav.location.set(v);
+      Nav.mountLocation(host, onChange);
+      if (onChange) onChange(v);
+    }
+    host.innerHTML =
+      '<section class="here location-panel"><h2 class="h">いまいる場所</h2>' +
+      (val
+        ? "<p>いま：<b>" +
+          esc(Nav.location.label(val)) +
+          "</b>" +
+          (val.face != null ? "（向きも設定済み）" : "") +
+          '</p><button type="button" class="link" data-edit>場所・向きを更新する</button>'
+        : '<button type="button" class="link" data-edit>現在地を選ぶ</button>') +
+      (edit
+        ? '<p>近くのお店と、見えている向きを教えてください。</p><p class="here-ex">例：スタバが左に見える</p>' +
+          (SR
+            ? '<button type="button" class="here-mic" data-mic>話して教える</button>'
+            : "") +
+          '<div class="here-row"><input aria-label="近くのお店と見える向き" placeholder="文字でも：スタバが左"><button type="button" class="here-go" data-go>場所を出す</button></div><p class="here-msg" role="status"></p><div data-confirm></div><details><summary>入口から選ぶ・館内QRについて</summary><p>館内QRを読み取ると、その場所から案内します。</p>' +
+          starts
+            .map(function (t) {
+              return (
+                '<button type="button" class="start-btn" data-start="' +
+                t.id +
+                '">' +
+                esc(t.label) +
+                "</button>"
+              );
+            })
+            .join("") +
+          "</details>"
+        : "") +
+      "</section>";
+    var editButton = host.querySelector("[data-edit]");
+    if (editButton)
+      editButton.onclick = function () {
+        Nav.mountLocation(host, onChange, true);
+      };
+    var input = host.querySelector("input"),
+      msg = host.querySelector("[role=status]");
+    if (!input) return;
+    function locate(texts) {
+      texts = Array.isArray(texts) ? texts : [texts];
+      var result = null, text = texts[0];
+      texts.some(function (candidate) { var found = whereFrom(candidate); if (!found) return false; result = found; text = candidate; return true; });
+      msg.textContent = '入力：' + text;
+      var box = host.querySelector('[data-confirm]'); box.innerHTML = '';
+      if (!result) { msg.textContent += '。お店が分かりませんでした。看板の名前で教えてください。'; return; }
+      var side = result.side, store = storeById[result.storeId];
+      function value() { return {from:result.storeId,face:faceOf(result.storeId,side,result.otherId,result.otherSide)}; }
+      box.innerHTML = '<div class="here-map">'+Nav.locationMap(value())+'</div><p><b>'+esc(store.floor+'F・'+store.name)+'の前</b>ですか？ お店の見える向きも選べます。</p><div class="here-sides">'+['left','front','right','back'].map(function(k){return '<button type="button" class="here-side'+(side===k?' on':'')+'" data-side="'+k+'">'+SIDE_JA[k]+'</button>';}).join('')+'</div><button type="button" class="btn primary" data-ok>ここを現在地にする</button>';
+      box.querySelectorAll('[data-side]').forEach(function(button){button.onclick=function(){side=button.dataset.side;box.querySelector('.here-map').innerHTML=Nav.locationMap(value());box.querySelectorAll('[data-side]').forEach(function(other){other.classList.toggle('on',other===button);});};});
+      box.querySelector('[data-ok]').onclick=function(){commit(value());};
+    }
+    host.querySelector("[data-go]").onclick = function () {
+      if (input.value.trim()) locate(input.value.trim());
+      else input.focus();
+    };
+    input.onkeydown = function (e) {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (input.value.trim()) locate(input.value.trim());
+      }
+    };
+    host.querySelectorAll("[data-start]").forEach(function (b) {
+      b.onclick = function () {
+        commit({ from: b.dataset.start, face: null });
+      };
+    });
+    var mic = host.querySelector("[data-mic]");
+    if (mic)
+      mic.onclick = function () {
+        if (recognition) {
+          recognition.stop();
+          return;
+        }
+        try {
+          var rec = (recognition = new SR());
+          rec.lang = "ja-JP";
+          rec.interimResults = true;
+          rec.maxAlternatives = 3;
+          mic.textContent = "聞いています…（押すと停止）";
+          msg.textContent = "近くのお店と見える向きを話してください。";
+          rec.onresult = function (e) {
+            var r = e.results[e.results.length - 1];
+            input.value = r[0].transcript;
+            if (r.isFinal) {
+              var alternatives = [];
+              for (var i = 0; i < r.length; i++)
+                alternatives.push(r[i].transcript);
+              locate(alternatives);
+            }
+          };
+          rec.onerror = function (e) {
+            msg.textContent =
+              e.error === "not-allowed"
+                ? "マイクが許可されていません。文字で入力できます。"
+                : e.error === "no-speech"
+                  ? "声が聞こえませんでした。もう一度話すか文字で入力してください。"
+                  : "聞き取れませんでした。文字で入力できます。";
+          };
+          rec.onend = function () {
+            recognition = null;
+            mic.textContent = "話して教える";
+          };
+          rec.start();
+        } catch (e) {
+          recognition = null;
+          mic.textContent = "話して教える";
+          msg.textContent =
+            "音声入力を開始できません。文字で入力してください。";
+        }
+      };
+  };
   if (document.body.dataset.explore) return;
 
   // ======================= 画面 =======================
-  var $ = function (id) { return document.getElementById(id); };
-  var state = { from: null, to: null, stepFree: false, idx: 0, mapFloor: 1, r: null, cards: null, q: '', course: null, cl: 0, legs: null, nz: null, face: null, here: null, hereText: '', hereMsg: '' };
+  var $ = function (id) {
+    return document.getElementById(id);
+  };
+  var state = {
+    from: null,
+    to: null,
+    stepFree: false,
+    idx: 0,
+    mapFloor: 1,
+    r: null,
+    cards: null,
+    q: "",
+    course: null,
+    cl: 0,
+    legs: null,
+    nz: null,
+    face: null,
+    here: null,
+    hereText: "",
+    hereMsg: "",
+    locating: false,
+    originLeg: 0,
+    baseFrom: null,
+  };
   var REDUCED = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
   // いまの区間の出発点（コースの2区間目からは、前の店の前）
-  function legStart() { return state.course && state.cl > 0 ? pointOf(state.course[state.cl - 1]) : pointOf(state.from); }
+  function legStart() {
+    return state.course && state.cl > 0 && state.cl !== state.originLeg
+      ? pointOf(state.course[state.cl - 1])
+      : pointOf(state.course && state.cl === 0 && state.originLeg > 0 ? state.baseFrom : state.from);
+  }
   function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function floorLabel(f) { return typeof f === 'number' ? f + 'F' : f; }
 
   function readUrl() {
     var q = new URLSearchParams(location.search);
-    var fq = q.get('from');
-    if (startById[fq] || (storeById[fq] && !storeById[fq].east && storeById[fq].polys.length)) state.from = fq;
-    var fc = parseInt(q.get('face'), 10); state.face = state.from && !startById[state.from] && isFinite(fc) ? fc : null;
+    var remembered = Nav.location.get();
+    var fq = remembered && remembered.from;
+    if (
+      startById[fq] ||
+      (storeById[fq] && !storeById[fq].east && storeById[fq].polys.length)
+    )
+      state.from = fq;
+    var fc = remembered && remembered.face;
+    state.face =
+      state.from && !startById[state.from] && fc != null && isFinite(fc)
+        ? fc
+        : null;
     var to = q.get('to');
-    if (to) { var hit = stores.filter(function (s) { return s.name === to; })[0]; if (hit) state.to = hit.id; }
-    state.stepFree = q.get('stepfree') === '1';
-    var cs = (q.get('course') || '').split(',').filter(function (id, i, a) { return storeById[id] && !storeById[id].east && a.indexOf(id) === i; }).slice(0, 6);
-    if (cs.length) { state.course = cs; state.cl = Math.max(0, Math.min(cs.length - 1, parseInt(q.get('leg'), 10) || 0)); state.to = cs[state.cl]; }
+    if (to) {
+      var hit = stores.filter(function (s) {
+        return s.name === to;
+      })[0];
+      if (hit) state.to = hit.id;
+    }
+    state.originLeg = Math.max(0, parseInt(q.get("originleg"), 10) || 0);
+    state.stepFree = q.get("stepfree") === "1";
+    var cs = (q.get("course") || "")
+      .split(",")
+      .filter(function (id, i, a) {
+        return Object.prototype.hasOwnProperty.call(storeById,id) && !storeById[id].east && a.indexOf(id) === i;
+      })
+      .slice(0, 6);
+    if (cs.length) {
+      state.course = cs;
+      state.cl = Math.max(
+        0,
+        Math.min(cs.length - 1, parseInt(q.get("leg"), 10) || 0),
+      );
+      state.to = cs[state.cl];
+      state.originLeg = Number.isInteger(Number(q.get("originleg"))) && state.originLeg <= state.cl ? state.originLeg : 0;
+      var base = validLocation({from:q.get("basefrom"),face:null});
+      state.baseFrom = base ? base.from : state.from;
+    }
   }
   function writeUrl() {
     var q = new URLSearchParams();
-    if (state.from) q.set('from', state.from);
-    if (state.from && !startById[state.from] && state.face != null) q.set('face', String(state.face));
-    if (state.course) { q.set('course', state.course.join(',')); q.set('leg', String(state.cl)); }
-    else if (state.to) q.set('to', storeById[state.to].name);
-    if (state.stepFree) q.set('stepfree', '1');
+    if (state.from) q.set("from", state.from);
+    if (state.from && !startById[state.from] && state.face != null)
+      q.set("face", String(state.face));
+    if (state.originLeg) {q.set("originleg", String(state.originLeg));if(state.baseFrom)q.set("basefrom",state.baseFrom);}
+    if (state.course) {
+      q.set("course", state.course.join(","));
+      q.set("leg", String(state.cl));
+    } else if (state.to) q.set("to", storeById[state.to].name);
+    if (state.stepFree) q.set("stepfree", "1");
     var s = q.toString();
-    try { history.replaceState(null, '', location.pathname + (s ? '?' + s : '')); } catch (e) { /* file:// など */ }
+    try {
+      history.replaceState(null, "", location.pathname + (s ? "?" + s : ""));
+    } catch (e) {}
   }
-  function applyFace() { // 見えている店から出した向きを、最初の案内文と地図に反映する
+  function applyFace() {
+    // 見えている店から出した向きを、最初の案内文と地図に反映する
     if (state.face == null || startById[state.from]) return;
-    var cs = state.course ? (state.legs && state.legs[0] && state.legs[0].cards) : state.cards, c = cs && cs[0];
-    if (!c || c.kind !== 'walk' || c.faced) return;
+    var cs = state.course
+        ? state.legs &&
+          state.legs[state.originLeg] &&
+          state.legs[state.originLeg].cards
+        : state.cards,
+      c = cs && cs[0];
+    if (!c || c.kind !== "walk" || c.faced) return;
     var head = storeById[state.from].name + 'の前から、', w = faceTurnWord(state.face, c.pts);
-    if (w && c.text.indexOf(head) === 0) { c.text = head + w + c.text.slice(head.length); c.faced = true; }
+    if (w && c.text.indexOf(head) === 0) {
+      c.text = head + w + c.text.slice(head.length);
+      c.faced = true;
+    }
   }
   function compute() {
-    state.r = null; state.cards = null; state.idx = 0;
+    state.r = null;
+    state.cards = null;
+    state.idx = 0;
     if (state.course) {
-      state.legs = state.from ? courseLegs(state.from, state.course, state.stepFree) : null;
+      state.legs = state.from
+        ? courseLegs(state.baseFrom || state.from, state.course, state.stepFree)
+        : null;
+      if (
+        state.legs &&
+        state.originLeg > 0 &&
+        state.originLeg < state.course.length
+      )
+        state.legs[state.originLeg] = legOf(
+          state.from,
+          state.course[state.originLeg],
+          state.stepFree,
+        );
+      if (state.legs && !state.legs[state.cl]) state.legs = null;
       state.to = state.course[state.cl];
       applyFace();
-      if (state.legs) { var lg = state.legs[state.cl]; state.r = lg.r; state.cards = lg.cards; state.mapFloor = state.cards[0].floor; }
+      if (state.legs) {
+        var lg = state.legs[state.cl];
+        state.r = lg.r;
+        state.cards = lg.cards;
+        state.mapFloor = state.cards[0].floor;
+      }
       return;
     }
     if (!state.from || !state.to || storeById[state.to].east) return;
     var lg0 = legOf(state.from, state.to, state.stepFree);
-    if (lg0) { state.r = lg0.r; state.cards = lg0.cards; applyFace(); state.mapFloor = state.cards[0].floor; }
+    if (lg0) {
+      state.r = lg0.r;
+      state.cards = lg0.cards;
+      applyFace();
+      state.mapFloor = state.cards[0].floor;
+    }
   }
 
   // ---------- 検索の画面 ----------
@@ -477,116 +829,72 @@
   function renderHome() {
     var q = state.q, html = '';
     if (!q) {
-      html += '<section class="block"><h2 class="h">主な行き先</h2><div class="chips">' +
-        QUICK.map(function (n) { var s = stores.filter(function (x) { return x.name === n; })[0]; return s ? '<button class="chip" data-id="' + s.id + '">' + esc(s.name.replace(/・Standard Products| コーヒー/, '')) + '</button>' : ''; }).join('') + '</div></section>';
-      html += '<section class="block"><h2 class="h">種類から探す</h2><div class="chips">' +
-        CATS.map(function (c) { return '<button class="chip ghost" data-q="' + esc(c[0]) + '">' + esc(c[1]) + '</button>'; }).join('') + '</div></section>';
-      if (state.from) html += '<p class="from-now">いまの場所：<b>' + esc(startById[state.from].label) + '</b>　<button class="link" id="change-from">変える</button></p>';
+      html +=
+        '<section class="block"><h2 class="h">主な行き先</h2><div class="chips">' +
+        QUICK.map(function (n) {
+          var s = stores.filter(function (x) {
+            return x.name === n;
+          })[0];
+          return s
+            ? '<button class="chip" data-id="' +
+                s.id +
+                '">' +
+                esc(s.name.replace(/・Standard Products| コーヒー/, "")) +
+                "</button>"
+            : "";
+        }).join("") +
+        "</div></section>";
+      html +=
+        '<section class="block"><h2 class="h">種類から探す</h2><div class="chips">' +
+        CATS.map(function (c) {
+          return (
+            '<button class="chip ghost" data-q="' +
+            esc(c[0]) +
+            '">' +
+            esc(c[1]) +
+            "</button>"
+          );
+        }).join("") +
+        "</div></section>";
     } else {
       var list = search(q);
-      html += '<p class="count">' + (list.length ? list.length + '件' : '見つかりませんでした。店名の一部や、ひらがなでもお試しください。') + '</p>';
-      html += '<ul class="results">' + list.map(rowHtml).join('') + '</ul>';
+      html +=
+        '<p class="count">' +
+        (list.length
+          ? list.length + "件"
+          : "見つかりませんでした。店名の一部や、ひらがなでもお試しください。") +
+        "</p>";
+      html += '<ul class="results">' + list.map(rowHtml).join("") + "</ul>";
     }
-    $('main').innerHTML = html;
-    bind('.chip[data-id], .res', function (b) { choose(b.getAttribute('data-id')); });
-    bind('.chip[data-q]', function (b) { state.q = b.getAttribute('data-q'); $('q').value = state.q; render(); });
-    var cf = $('change-from'); if (cf) cf.addEventListener('click', function () { state.from = null; writeUrl(); render(); });
+    $("main").innerHTML = html;
+    bind(".chip[data-id], .res", function (b) {
+      choose(b.getAttribute("data-id"));
+    });
+    bind(".chip[data-q]", function (b) {
+      state.q = b.getAttribute("data-q");
+      $("q").value = state.q;
+      render();
+    });
+    var host = document.createElement("div");
+    host.id = "current-location";
+    $("main").prepend(host);
+    Nav.mountLocation(host, function (v) {
+      state.from = v.from;
+      state.face = v.face;
+      writeUrl();
+      compute();
+      render();
+    });
+    var cf = $('change-from');
+    if (cf)
+      cf.addEventListener("click", function () {
+        state.locating = true;
+        render();
+      });
   }
   function bind(sel, fn) { Array.prototype.forEach.call(document.querySelectorAll(sel), function (b) { b.addEventListener('click', function () { fn(b); }); }); }
   function choose(id) { state.to = id; state.q = ''; $('q').value = ''; writeUrl(); compute(); render(); window.scrollTo(0, 0); }
 
-  // ---------- 見えているお店から、いまの場所を出す ----------
-  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  function hereBox() {
-    return '<section class="here" aria-label="近くのお店から場所を出す">' +
-      '<p class="here-lead">近くに見えるお店と、<b>見えている向き</b>を教えてください。</p>' +
-      '<p class="here-ex">例：「スタバが左に見える」「ユニクロが正面」</p>' +
-      (SR ? '<button type="button" id="here-mic" class="here-mic"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>話して教える</span></button>' : '') +
-      '<div class="here-row"><input id="here-q" type="text" placeholder="文字でも：スタバが左" enterkeyhint="go" autocomplete="off" value="' + esc(state.hereText || '') + '">' +
-      '<button type="button" id="here-go" class="here-go">場所を出す</button></div>' +
-      '<p id="here-msg" class="here-msg" role="status">' + esc(state.hereMsg || '') + '</p></section>';
-  }
-  function locate(texts) {
-    var r = null, used = '';
-    for (var i = 0; i < texts.length && !r; i++) { r = whereFrom(texts[i]); used = texts[i]; }
-    state.hereText = used || texts[0] || '';
-    if (!r) {
-      state.hereMsg = 'お店の名前が分かりませんでした。看板に書いてある名前で、もう一度教えてください。';
-      render(); var m = $('here-msg'); if (m) m.classList.add('ng'); return;
-    }
-    state.hereMsg = '';
-    state.here = { storeId: r.storeId, side: r.side, otherId: r.otherId, otherSide: r.otherSide };
-    render(); var hq = document.querySelector('#main .q'); if (hq && hq.scrollIntoView) hq.scrollIntoView(); else window.scrollTo(0, 0);
-  }
-  function bindHere() {
-    var input = $('here-q'), go = $('here-go'), mic = $('here-mic');
-    if (!input) return;
-    go.addEventListener('click', function () { if (input.value.trim()) locate([input.value.trim()]); else input.focus(); });
-    input.addEventListener('keydown', function (e) { if (e.key === 'Enter' && input.value.trim()) locate([input.value.trim()]); });
-    if (!mic) return;
-    var rec = null;
-    mic.addEventListener('click', function () {
-      if (rec) { rec.stop(); return; }
-      try { rec = new SR(); } catch (e) { rec = null; return; }
-      rec.lang = 'ja-JP'; rec.interimResults = true; rec.maxAlternatives = 3; rec.continuous = false;
-      var done = false, msg = $('here-msg');
-      mic.classList.add('on'); mic.querySelector('span').textContent = '聞いています…（もう一度押すと止まります）';
-      msg.classList.remove('ng'); msg.textContent = '「スタバが左に見える」のように話してください。';
-      rec.onresult = function (e) {
-        var res = e.results[e.results.length - 1]; input.value = res[0].transcript;
-        if (res.isFinal && !done) { done = true; var alts = []; for (var i = 0; i < res.length; i++) alts.push(res[i].transcript); rec.stop(); locate(alts); }
-      };
-      rec.onerror = function (e) {
-        msg.classList.add('ng');
-        msg.textContent = e.error === 'not-allowed' || e.error === 'service-not-allowed' ? 'マイクが使えません。ブラウザのサイト設定でマイクを許可するか、文字で入力してください。'
-          : e.error === 'no-speech' ? '声が聞こえませんでした。もう一度押して話すか、文字で入力してください。' : '聞き取れませんでした。文字で入力してください。';
-      };
-      rec.onend = function () { rec = null; var b = $('here-mic'); if (b) { b.classList.remove('on'); b.querySelector('span').textContent = '話して教える'; } };
-      try { rec.start(); } catch (e) { rec = null; mic.classList.remove('on'); }
-    });
-  }
-  function renderHere() {
-    var h = state.here, s = storeById[h.storeId], face = faceOf(h.storeId, h.side, h.otherId, h.otherSide), o = h.otherId ? storeById[h.otherId] : null;
-    var nm = s.name.replace(/・Standard Products/, ''), html = destHead(storeById[state.to]);
-    html += '<h2 class="h q">いまの場所は、ここですか？</h2><section class="here-card">';
-    html += '<p class="here-say">' + esc(s.floor + 'F・' + nm) + 'の前' + (h.side ? 'で、お店を<b>' + SIDE_JA[h.side] + '</b>に見ています。' : face != null && o ? 'で、' + esc(o.name) + 'を<b>' + SIDE_JA[h.otherSide] + '</b>に見ています。' : 'にいます。') + '</p>';
-    html += '<div class="here-map">' + hereMap(s, face, o) + '</div>';
-    html += '<p class="here-legend">' + (face != null ? '緑の矢印が、いまあなたが向いている方向です。' : '緑の丸が、いまいる所です。お店がどちらに見えるか選ぶと、向きも出ます。') + '</p>';
-    html += '<p class="here-sideq">' + esc(nm) + 'は、どちらに見えますか？</p><div class="here-sides" role="group">' +
-      ['left', 'front', 'right', 'back'].map(function (k) { return '<button type="button" class="here-side' + (h.side === k ? ' on' : '') + '" data-side="' + k + '">' + { left: '左', front: '正面', right: '右', back: '後ろ' }[k] + '</button>'; }).join('') + '</div>';
-    html += '<div class="nav"><button id="here-retry" class="btn">言い直す</button><button id="here-ok" class="btn primary">ここから案内</button></div></section>';
-    $('main').innerHTML = html;
-    bind('.here-side', function (b) { h.side = b.getAttribute('data-side'); render(); });
-    $('here-retry').addEventListener('click', function () { state.here = null; render(); setTimeout(function () { var i = $('here-q'); if (i) i.focus(); }, 0); });
-    $('here-ok').addEventListener('click', function () { state.from = h.storeId; state.face = face; state.here = null; state.hereText = ''; writeUrl(); compute(); render(); window.scrollTo(0, 0); });
-    bindDestHead();
-  }
-  function hereMap(s, face, o) {
-    var fl = s.floor, W = 300, H = 230, vb = { x: s.door.x - W / 2, y: s.door.y - H / 2, w: W, h: H }, u = W / 360;
-    var t = '<svg viewBox="' + [vb.x, vb.y, vb.w, vb.h].map(Math.round).join(' ') + '" role="img" aria-label="いまの場所の地図">';
-    t += '<polygon points="' + pp(G[fl].outline) + '" fill="#fff" stroke="#b9c2b5" stroke-width="' + 1.4 * u + '"/>';
-    (M.floors[fl].voids || []).forEach(function (p) { t += '<polygon points="' + pp(p) + '" fill="#e4ebf1" stroke="#c3cfda" stroke-width="' + 0.7 * u + '"/>'; });
-    (M.unnamed[fl] || []).forEach(function (p) { t += '<polygon points="' + pp(p) + '" fill="#eef1ec" stroke="#d9ded5" stroke-width="' + 0.6 * u + '"/>'; });
-    stores.forEach(function (st) {
-      if (st.floor !== fl || !st.polys.length) return;
-      var key = st.id === s.id || (o && st.id === o.id);
-      st.polys.forEach(function (p) { t += '<polygon points="' + pp(p) + '" fill="' + (key ? '#cfe9d6' : '#f1f6e9') + '" stroke="' + (key ? '#00a040' : '#c9d6b8') + '" stroke-width="' + (key ? 1.8 : 0.7) * u + '"/>'; });
-    });
-    stores.forEach(function (st) {
-      if (st.floor !== fl || !st.polys.length) return;
-      var poly = st.polys[0], c = centroid(poly), key = st.id === s.id || (o && st.id === o.id);
-      if (c.x < vb.x - 20 || c.x > vb.x + W + 20 || c.y < vb.y - 20 || c.y > vb.y + H + 20) return;
-      var xs = poly.map(function (p) { return p[0]; }), ys = poly.map(function (p) { return p[1]; });
-      var bw = Math.max.apply(null, xs) - Math.min.apply(null, xs), bh = Math.max.apply(null, ys) - Math.min.apply(null, ys);
-      var nm = st.name.replace(/（.*?）|・Standard Products/g, ''), fs = Math.min(9 * u, bw / (nm.length * 1.0));
-      if (!key && (fs < 5.2 * u || bh < 7 * u)) return;
-      if (key) fs = Math.max(fs, 8 * u);
-      t += '<text x="' + c.x + '" y="' + c.y + '" font-size="' + fs + '" text-anchor="middle" dominant-baseline="middle" fill="' + (key ? '#0d4a26' : '#6b7568') + '"' + (key ? ' font-weight="700" paint-order="stroke" stroke="#fff" stroke-width="' + 2.4 * u + '"' : '') + '>' + esc(nm) + '</text>';
-    });
-    t += youAreHere(s.door, face, u, 'いまここ', s.id);
-    return t + '</svg>';
-  }
-  // いまいる所の印：緑の丸＋向いている方向の矢印（向きが分からない時は丸だけ）
   function youAreHere(p, face, u, label, sid) {
     var t = '';
     if (face != null) {
@@ -602,16 +910,6 @@
     return t;
   }
 
-  // ---------- 出発点の画面 ----------
-  function renderStart() {
-    var d = storeById[state.to];
-    var html = destHead(d) + '<h2 class="h q">いまどこにいますか？</h2>' + hereBox() + '<p class="starts-h">入口にいる方は、ここから選ぶ</p><div class="starts">';
-    starts.forEach(function (s) { html += '<button class="start-btn" data-from="' + s.id + '"><span class="fl-badge">' + s.floor + 'F</span>' + esc(s.label.replace(/^[12]F /, '')) + '</button>'; });
-    html += '</div><p class="hint">館内のQRシールを読み取ると、この質問は省かれます。</p>';
-    $('main').innerHTML = html;
-    bind('.start-btn', function (b) { state.from = b.getAttribute('data-from'); state.face = null; writeUrl(); compute(); render(); });
-    bindHere(); bindDestHead();
-  }
   function destHead(d) {
     return '<div class="dest"><span class="dest-pin" aria-hidden="true"></span><div class="dest-body"><p class="dest-label">行き先</p>' +
       '<p class="dest-name">' + esc(d.name) + '</p><p class="dest-meta">' + esc(floorLabel(d.floor)) + '・' + esc(d.cat) + '</p></div>' +
@@ -624,37 +922,160 @@
     var d = storeById[state.to], cs = state.cards, c = cs[state.idx], co = state.course, last = !co || state.cl === co.length - 1;
     var html = '';
     if (co) {
-      html += '<section class="course" aria-label="寄り道コース"><p class="course-h">寄り道コース <b>' + (state.cl + 1) + '</b> / ' + co.length + '店目</p><ol class="course-list">' +
-        co.map(function (id, i) { return '<li class="' + (i < state.cl ? 'done' : i === state.cl ? 'now' : '') + '"><span>' + (i + 1) + '</span>' + esc(storeById[id].name.replace(/・Standard Products/, '')) + '</li>'; }).join('') +
+      html +=
+        '<section class="course" aria-label="寄り道コース"><p class="course-h">寄り道コース <b>' +
+        (state.cl + 1) +
+        "</b> / " +
+        co.length +
+        '店目</p><ol class="course-list">' +
+        co
+          .map(function (id, i) {
+            return (
+              '<li class="' +
+              (i < state.cl ? "done" : i === state.cl ? "now" : "") +
+              '"><span>' +
+              (i + 1) +
+              "</span>" +
+              esc(storeById[id].name.replace(/・Standard Products/, "")) +
+              "</li>"
+            );
+          })
+          .join("") +
         '</ol><button class="link" id="quit-course">コースをやめる</button></section>';
     }
     html += destHead(d);
     var sp = legStart();
-    html += '<div class="opts"><p class="from-now">出発：<b>' + esc(sp.label) + '</b>' + (!co || state.cl === 0 ? '　<button class="link" id="change-from">変える</button>' : '') + '</p>' +
-      '<div class="seg-wrap" role="group" aria-label="道の選び方"><button class="seg' + (state.stepFree ? '' : ' on') + '" data-sf="0">ふつう</button>' +
-      '<button class="seg' + (state.stepFree ? ' on' : '') + '" data-sf="1">車いす・ベビーカー</button></div></div>';
+    html +=
+      '<div class="opts"><p class="from-now">出発：<b>' +
+      esc(sp.label) +
+      "</b>" +
+      '　<button class="link" id="change-from">いまどこ？</button>' +
+      "</p>" +
+      '<details class="route-details"><summary>案内の設定</summary><div id="route-voice-setting"></div><div class="seg-wrap" role="group" aria-label="道の選び方"><button class="seg' +
+      (state.stepFree ? "" : " on") +
+      '" data-sf="0">ふつう</button>' +
+      '<button class="seg' +
+      (state.stepFree ? " on" : "") +
+      '" data-sf="1">車いす・ベビーカー</button></div></details></div>';
     var stepTag = c.kind === 'arrive' ? '到着' : (state.idx + 1) + ' / ' + (cs.length - 1);
-    html += '<section class="card' + (c.kind === 'arrive' ? ' arrive' : '') + '" aria-live="polite">' +
-      '<div class="card-top"><span class="step-no">' + stepTag + '</span><span class="card-fl">' + c.floor + '階' + (c.kind === 'lift' ? ' → ' + c.floorTo + '階' : '') + '</span></div>' +
-      '<p class="card-text">' + esc(c.text) + '</p>' + (c.sub ? '<p class="card-sub">' + esc(c.sub) + '</p>' : '') +
-      (c.kind === 'arrive' && co ? '<p class="card-sub">' + (last ? 'コースの最後のお店です。' : '次は ' + esc(storeById[co[state.cl + 1]].name) + ' です。') + '</p>' : '') +
-      '<div class="nav"><button id="prev" class="btn"' + (state.idx === 0 && !(co && state.cl > 0) ? ' disabled' : '') + '>' + (state.idx === 0 && co && state.cl > 0 ? '前の店へ' : '前へ') + '</button>' +
-      (state.idx === cs.length - 1 ? (last ? '<button id="again" class="btn primary">' + (co ? 'コースを終える' : 'ほかの店を探す') + '</button>' : '<button id="next-stop" class="btn primary">次の店へ →</button>') : '<button id="next" class="btn primary">次へ</button>') + '</div></section>';
-    var floorsUsed = {}; cs.forEach(function (x) { floorsUsed[x.floor] = 1; if (x.floorTo) floorsUsed[x.floorTo] = 1; });
-    html += '<div class="map-head"><div class="floors">' + [1, 2].map(function (f) { return '<button class="fl' + (state.mapFloor === f ? ' on' : '') + '" data-fl="' + f + '">' + f + 'F' + (floorsUsed[f] ? '' : '') + '</button>'; }).join('') +
-      '</div><p class="legend"><span class="lg lg-route"></span>道順　<span class="lg lg-dest"></span>行き先</p></div>';
+    html +=
+      '<section class="card' +
+      (c.kind === "arrive" ? " arrive" : "") +
+      '" aria-live="polite">' +
+      '<div class="card-top"><span class="step-no">' +
+      stepTag +
+      '</span><span class="card-fl">' +
+      c.floor +
+      "階" +
+      (c.kind === "lift" ? " → " + c.floorTo + "階" : "") +
+      "</span></div>" +
+      '<p class="card-text">' +
+      esc(c.text) +
+      "</p>" +
+      (c.sub ? '<p class="card-sub">' + esc(c.sub) + "</p>" : "") +
+      (c.kind === "arrive" && co
+        ? '<p class="card-sub">' +
+          (last
+            ? "コースの最後のお店です。"
+            : "次は " + esc(storeById[co[state.cl + 1]].name) + " です。") +
+          "</p>"
+        : "") +
+      '<div class="nav"><button id="prev" class="btn"' +
+      (state.idx === 0 && !(co && state.cl > 0) ? " disabled" : "") +
+      ">" +
+      (state.idx === 0 && co && state.cl > 0 ? "前の店へ" : "前へ") +
+      "</button>" +
+      (state.idx === cs.length - 1
+        ? last
+          ? '<button id="again" class="btn primary">' +
+            (co ? "コースを終える" : "ほかの店を探す") +
+            "</button>"
+          : '<button id="next-stop" class="btn primary">次の店へ →</button>'
+        : '<button id="next" class="btn primary">次へ</button>') +
+      "</div></section>";
+    var floorsUsed = {};
+    cs.forEach(function (x) {
+      floorsUsed[x.floor] = 1;
+      if (x.floorTo) floorsUsed[x.floorTo] = 1;
+    });
+    html +=
+      '<div class="map-head"><div class="floors">' +
+      [1, 2]
+        .map(function (f) {
+          return (
+            '<button class="fl' +
+            (state.mapFloor === f ? " on" : "") +
+            '" data-fl="' +
+            f +
+            '">' +
+            f +
+            "F" +
+            (floorsUsed[f] ? "" : "") +
+            "</button>"
+          );
+        })
+        .join("") +
+      '</div></div>';
     state.nz = null; // カードを進めた・階を替えた時は、今までどおり、その区間が見える位置に戻す
-    html += '<div class="map-wrap"><div class="map" id="nmap">' + renderMap() + '</div><div class="nzoom"><button type="button" id="nz-in" aria-label="地図を拡大">＋</button><button type="button" id="nz-out" aria-label="地図を縮小">−</button><button type="button" id="nz-reset" aria-label="地図の拡大を戻す">↺</button></div></div>';
-    html += '<p class="nz-hint" hidden>Ctrl（⌘）＋ホイールで地図を拡大できます</p>'; html += '<p class="hint">' + (state.stepFree ? 'エレベーターだけを使う道順の目安です。段差・通路幅・扉は現地未確認です。' : '公式フロアマップから起こした道順の目安です（現地未確認）。') + '</p>';
-    $('main').innerHTML = html; bindZoom();
-    $('prev').addEventListener('click', function () { if (state.idx === 0 && co && state.cl > 0) setLeg(state.cl - 1, true); else go(-1); });
-    if ($('next')) $('next').addEventListener('click', function () { go(1); });
-    if ($('next-stop')) $('next-stop').addEventListener('click', function () { setLeg(state.cl + 1, false); });
-    if ($('again')) $('again').addEventListener('click', function () { state.course = null; state.to = null; writeUrl(); compute(); render(); setTimeout(function () { $('q').focus(); }, 0); });
-    if ($('quit-course')) $('quit-course').addEventListener('click', function () { state.course = null; writeUrl(); compute(); render(); });
-    if ($('change-from')) $('change-from').addEventListener('click', function () { state.from = null; writeUrl(); compute(); render(); });
-    bind('.seg', function (b) { state.stepFree = b.getAttribute('data-sf') === '1'; writeUrl(); compute(); render(); });
-    bind('.fl', function (b) { state.mapFloor = +b.getAttribute('data-fl'); render(); });
+    html +=
+      '<div class="map-wrap"><div class="map" id="nmap">' +
+      renderMap() +
+      '</div><div class="nzoom"><button type="button" id="nz-in" aria-label="地図を拡大">＋</button><button type="button" id="nz-out" aria-label="地図を縮小">−</button><button type="button" id="nz-reset" aria-label="地図の拡大を戻す">↺</button></div></div>';
+    html +=
+      '<p class="nz-hint" hidden>Ctrl（⌘）＋ホイールで地図を拡大できます</p>';
+    html +=
+      '<details class="route-details"><summary>地図・案内について</summary><p class="legend"><span class="lg lg-route"></span>道順　<span class="lg lg-dest"></span>行き先</p><p class="hint">' +
+      (state.stepFree
+        ? "エレベーターだけを使う道順の目安です。段差・通路幅・扉は現地未確認です。"
+        : "公式フロアマップから起こした道順の目安です（現地未確認）。") +
+      "</p></details>";
+    $("main").innerHTML = html;
+    bindZoom();
+    $("prev").addEventListener("click", function () {
+      if (state.idx === 0 && co && state.cl > 0) setLeg(state.cl - 1, true);
+      else go(-1);
+    });
+    if ($("next"))
+      $("next").addEventListener("click", function () {
+        go(1);
+      });
+    if ($("next-stop"))
+      $("next-stop").addEventListener("click", function () {
+        setLeg(state.cl + 1, false);
+      });
+    if ($("again"))
+      $("again").addEventListener("click", function () {
+        state.course = null;
+        state.to = null;
+        writeUrl();
+        compute();
+        render();
+        setTimeout(function () {
+          $("q").focus();
+        }, 0);
+      });
+    if ($("quit-course"))
+      $("quit-course").addEventListener("click", function () {
+        state.course = null;
+        writeUrl();
+        compute();
+        render();
+      });
+    if ($("change-from"))
+      $("change-from").addEventListener("click", function () {
+        state.locating = true;
+        render();
+      });
+    bind(".seg", function (b) {
+      state.stepFree = b.getAttribute("data-sf") === "1";
+      writeUrl();
+      compute();
+      render();
+    });
+    bind(".fl", function (b) {
+      state.mapFloor = +b.getAttribute("data-fl");
+      render();
+    });
     bindDestHead();
   }
   // コースの区間を切り替える（atEnd：前の店へ戻る時は、その区間の到着カードを出す）
@@ -840,7 +1261,7 @@
     }
     // 出発
     var st0 = legStart();
-    if (st0.floor === fl && !st0.entrance && state.face != null && !(state.course && state.cl > 0)) s += youAreHere(st0, state.face, u, 'いまここ', st0.storeId);
+    if (st0.floor === fl && !st0.entrance && state.face != null && !(state.course && state.cl !== state.originLeg)) s += youAreHere(st0, state.face, u, 'いまここ', st0.storeId);
     else if (st0.floor === fl) {
       s += '<circle cx="' + st0.x + '" cy="' + st0.y + '" r="' + 8 * u + '" fill="#fff" stroke="#00a040" stroke-width="' + 3.4 * u + '"/>';
       s += '<text x="' + st0.x + '" y="' + (st0.y + 19 * u) + '" font-size="' + 9 * u + '" font-weight="700" text-anchor="middle" fill="#007a30" paint-order="stroke" stroke="#fff" stroke-width="' + 2.4 * u + '">出発</text>';
@@ -873,21 +1294,73 @@
   }
 
   function render() {
-    if (!state.to) renderHome();
+    if (
+      state.locating ||
+      (state.to && !state.from && !storeById[state.to].east)
+    ) {
+      $("main").innerHTML =
+        (state.to ? destHead(storeById[state.to]) : "") +
+        '<div id="current-location"></div>' +
+        (state.locating && state.from
+          ? '<button class="btn" id="cancel-location">案内に戻る</button>'
+          : "");
+      if ($("cancel-location"))
+        $("cancel-location").onclick = function () {
+          state.locating = false;
+          render();
+        };
+      Nav.mountLocation(
+        $("current-location"),
+        function (v) {
+          if(!state.baseFrom || state.cl===0)state.baseFrom=v.from;
+          state.from = v.from;
+          state.face = v.face;
+          state.originLeg = state.cl;
+          state.locating = false;
+          writeUrl();
+          compute();
+          render();
+        },
+        true,
+      );
+      bindDestHead();
+    } else if (!state.to) renderHome();
     else if (storeById[state.to].east) renderEast();
-    else if (!state.from) { if (state.here) renderHere(); else renderStart(); }
-    else if (state.cards) renderRoute();
-    else { $('main').innerHTML = destHead(storeById[state.to]) + '<p class="card-text">道順が見つかりませんでした。</p><p><button class="link" id="change-from">出発点を選び直す</button></p>'; $('change-from').addEventListener('click', function () { state.from = null; writeUrl(); render(); }); bindDestHead(); }
-    document.body.classList.toggle('routing', !!state.to);
+ else if (state.cards) renderRoute();
+    else {
+      $("main").innerHTML =
+        destHead(storeById[state.to]) +
+        '<p class="card-text">道順が見つかりませんでした。</p><p><button class="link" id="change-from">出発点を選び直す</button></p>';
+      $("change-from").addEventListener("click", function () {
+        state.locating = true;
+        render();
+      });
+      bindDestHead();
+    }
+    document.body.classList.toggle("routing", !!state.to);
   }
 
   function init() {
-    readUrl(); compute();
+    readUrl();
+    compute();
     var input = $('q');
-    input.addEventListener('input', function () { state.q = input.value.trim(); if (state.q && state.to) { state.to = null; writeUrl(); } render(); });
-    input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { var l = search(input.value); if (l.length === 1) choose(l[0].id); } });
+    input.addEventListener("input", function () {
+      state.q = input.value.trim();
+      if (state.q && state.to) {
+        state.to = null;
+        writeUrl();
+      }
+      render();
+    });
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") {
+        var l = search(input.value);
+        if (l.length === 1) choose(l[0].id);
+      }
+    });
     render();
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+  if (document.readyState === "loading")
+    document.addEventListener("DOMContentLoaded", init);
+  else init();
 })();
-

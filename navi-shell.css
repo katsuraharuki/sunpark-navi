@@ -12,7 +12,7 @@
 .from-now,.hint{font-size:14px;color:#3f4b43}
 .voice-bar{max-width:600px;margin:8px auto 0;padding:0 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .voice-bar[hidden]{display:none}
-.voice-btn{min-height:48px;padding:0 20px;border-radius:999px;border:2px solid #00843e;background:#fff;color:#005b2e;font-size:16px;font-weight:800}
+.voice-btn{min-height:44px;padding:0 16px;border-radius:999px;border:2px solid #00843e;background:#fff;color:#005b2e;font-size:16px;font-weight:700}
 .voice-btn.on{background:#00843e;color:#fff}
 .voice-again{min-height:48px;padding:0 16px;border-radius:999px;border:1px solid #dfe5db;background:#fff;font-size:15px;font-weight:700}
 .voice-hint{font-size:14px;color:#3f4b43}
@@ -26,12 +26,6 @@
 .nzoom button{min-width:44px;min-height:44px;border:0;background:none;border-radius:999px;font-size:19px;color:#24302a;cursor:pointer}
 .nz-hint{font-size:13px;color:#3f4b43;margin:6px 0 0}
 
-.device-location{max-width:600px;margin:4px auto 12px;padding:0 16px;color:#3f4b43}
-.device-location-toggle{min-height:44px;padding:0 14px;border:1px solid var(--green);border-radius:8px;background:#fff;color:var(--green-d);font:inherit;font-size:14px;font-weight:700;cursor:pointer}
-.device-location-toggle:focus-visible{outline:3px solid #eb6b00;outline-offset:2px}
-.device-location-status,.device-location-details p{margin:5px 0 0;font-size:13px;line-height:1.55}
-.device-location-details p{font-variant-numeric:tabular-nums}
-.device-location-details span{display:inline-block;margin-right:12px}
 
 /* 見えているお店から、いまの場所を出す（2026-11-19） */
 .here{border:1px solid var(--line);border-radius:14px;padding:14px;background:var(--soft);margin:0 0 18px}
@@ -61,3 +55,17 @@
 .here-sides{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:14px}
 .here-side{font-size:15px;font-weight:700;padding:10px 0;border:1px solid var(--line);border-radius:10px;background:#fff;cursor:pointer}
 .here-side.on{background:var(--green);border-color:var(--green);color:#fff}
+
+/* 案内と地図を主役にし、補助情報は控えめにする。 */
+body.routing .top-in{padding-top:8px;padding-bottom:8px}
+body.routing .top h1{font-size:20px}
+body.routing .back-explore{padding-top:8px;padding-bottom:8px;font-size:13px}
+.route-details{margin:12px 0;color:var(--sub);font-size:14px}
+.route-details summary{cursor:pointer;min-height:44px;display:flex;align-items:center;text-decoration:underline;text-underline-offset:3px}
+.route-details[open] summary{margin-bottom:6px}
+.foot{margin-top:24px}
+.foot p{font-size:12px;line-height:1.65}
+
+.location-panel{scroll-margin-top:16px}
+.location-panel button{min-height:44px}
+.location-panel .here-map svg{max-height:45vh}
