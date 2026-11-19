@@ -673,6 +673,21 @@
 
   // ---------- 地図 ----------
   function pp(poly) { return poly.map(function (p) { return p[0] + ',' + p[1]; }).join(' '); }
+  // 進行方向の矢印（線の上に一定の間隔で「＞」を並べる。向きは、その区間の進む向き）
+  function chevrons(pts, gap, size, color, op, w) {
+    var out = '', next = gap * 0.6, run = 0;
+    for (var i = 1; i < pts.length; i++) {
+      var a = pts[i - 1], b = pts[i], L = Math.hypot(b.x - a.x, b.y - a.y); if (!L) continue;
+      var ang = Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
+      while (next <= run + L) {
+        var t = (next - run) / L, x = a.x + (b.x - a.x) * t, y = a.y + (b.y - a.y) * t;
+        out += '<path d="M' + (-size * 0.55) + ',' + (-size) + ' L' + (size * 0.55) + ',0 L' + (-size * 0.55) + ',' + size + '" transform="translate(' + x.toFixed(1) + ',' + y.toFixed(1) + ') rotate(' + ang.toFixed(1) + ')" fill="none" stroke="' + color + '" stroke-opacity="' + op + '" stroke-width="' + w + '" stroke-linecap="round" stroke-linejoin="round"/>';
+        next += gap;
+      }
+      run += L;
+    }
+    return '<g class="dir-arrows" aria-hidden="true">' + out + '</g>';
+  }
   function pl(pts) { return pts.map(function (p) { return Math.round(p.x) + ',' + Math.round(p.y); }).join(' '); }
   function viewBox(fl) {
     var xs = [], ys = [];
@@ -795,10 +810,12 @@
     state.cards.forEach(function (c) {
       if (c.floor !== fl || c.kind !== 'walk') return;
       s += '<polyline points="' + pl(c.pts) + '" fill="none" stroke="#eb6b00" stroke-opacity=".35" stroke-width="' + 5 * u + '" stroke-linecap="round" stroke-linejoin="round"/>';
+      if (c !== cur) s += chevrons(c.pts, 24 * u, 3.6 * u, '#d45f00', '.9', 2.2 * u);
     });
     if (cur && cur.floor === fl && cur.kind === 'walk') {
       s += '<polyline points="' + pl(cur.pts) + '" fill="none" stroke="#fff" stroke-width="' + 11 * u + '" stroke-linecap="round" stroke-linejoin="round"/>';
       s += '<polyline points="' + pl(cur.pts) + '" fill="none" stroke="#eb6b00" stroke-width="' + 7 * u + '" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arw)"/>';
+      s += chevrons(cur.pts, 18 * u, 4.2 * u, '#fff', '1', 2.6 * u);
     }
     // 昇降機
     Object.keys(lifts).forEach(function (k) {
@@ -833,7 +850,8 @@
       var p0 = cur.pts[0], path = 'M' + cur.pts.map(function (p) { return Math.round(p.x) + ',' + Math.round(p.y); }).join(' L');
       s += '<g class="walker"' + (REDUCED ? ' transform="translate(' + Math.round(p0.x) + ',' + Math.round(p0.y) + ')"' : '') + '>' +
         '<circle r="' + 9 * u + '" fill="#fff" fill-opacity=".55"/><circle r="' + 5.2 * u + '" fill="#fff" stroke="#00a040" stroke-width="' + 2.6 * u + '"/>' +
-        (REDUCED ? '' : '<animateMotion dur="2.6s" repeatCount="indefinite" calcMode="linear" keyPoints="0;1;1" keyTimes="0;0.85;1" path="' + path + '"/>') + '</g>';
+        '<path d="M' + (-2.2 * u) + ',' + (-2.8 * u) + ' L' + (3.2 * u) + ',0 L' + (-2.2 * u) + ',' + (2.8 * u) + ' z" fill="#00a040"' + (REDUCED ? ' transform="rotate(' + (Math.atan2(cur.pts[1].y - p0.y, cur.pts[1].x - p0.x) * 180 / Math.PI).toFixed(1) + ')"' : '') + '/>' +
+        (REDUCED ? '' : '<animateMotion dur="2.6s" repeatCount="indefinite" rotate="auto" calcMode="linear" keyPoints="0;1;1" keyTimes="0;0.85;1" path="' + path + '"/>') + '</g>';
     }
     // 昇降機を降りた所
     state.cards.forEach(function (c) {
