@@ -566,32 +566,37 @@
           esc(Nav.location.label(val)) +
           "</b>" +
           (val.face != null ? "（向きも設定済み）" : "") +
-          '</p><button type="button" class="link" data-edit>場所・向きを更新する</button>'
-        : '<button type="button" class="link" data-edit>現在地を選ぶ</button>') +
+          "</p>"
+        : "") +
+      (!edit
+        ? '<button type="button" class="link" data-edit>' +
+          (val ? "場所・向きを更新する" : "現在地を選ぶ") +
+          "</button>"
+        : "") +
       (edit
-        ? '<p>近くのお店と、見えている向きを教えてください。</p><p class="here-ex">例：スタバが左に見える</p>' +
+        ? '<section class="location-method"><h3 tabindex="-1" data-method-heading>入口から選ぶ</h3><div class="location-entrances">' +
+          starts
+            .map(function (entrance) {
+              var label = entrance.label;
+              if (entrance.id === "f1_main") label = "1F 正面玄関（屋外駐車場側）";
+              if (entrance.id === "f1_west") label = "1F 西口（スターバックス側）";
+              return '<button type="button" class="start-btn" data-start="' +
+                esc(entrance.id) + '">' + esc(label) + "</button>";
+            })
+            .join("") +
+          '</div></section><section class="location-method"><h3>見えているお店から探す</h3><p class="here-ex">例：スタバが左に見える</p>' +
           (SR
             ? '<button type="button" class="here-mic" data-mic>話して教える</button>'
             : "") +
-          '<div class="here-row"><input aria-label="近くのお店と見える向き" placeholder="文字でも：スタバが左"><button type="button" class="here-go" data-go>場所を出す</button></div><p class="here-msg" role="status"></p><div data-confirm></div><details><summary>入口から選ぶ・館内QRについて</summary><p>館内QRを読み取ると、その場所から案内します。</p>' +
-          starts
-            .map(function (t) {
-              return (
-                '<button type="button" class="start-btn" data-start="' +
-                t.id +
-                '">' +
-                esc(t.label) +
-                "</button>"
-              );
-            })
-            .join("") +
-          "</details>"
+          '<div class="here-row"><input aria-label="近くのお店と見える向き" placeholder="文字でも：スタバが左"><button type="button" class="here-go" data-go>場所を出す</button></div><p class="here-msg" role="status"></p><div data-confirm></div></section>' +
+          '<p class="here-ex location-qr">館内QRからも現在地を設定できます。</p>'
         : "") +
       "</section>";
     var editButton = host.querySelector("[data-edit]");
     if (editButton)
       editButton.onclick = function () {
         Nav.mountLocation(host, onChange, true);
+        host.querySelector("[data-method-heading]").focus();
       };
     var input = host.querySelector("input"),
       msg = host.querySelector("[role=status]");

@@ -1,0 +1,39 @@
+.location-method + .location-method {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.location-method h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.location-entrances {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.location-entrances .start-btn {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.location-entrances .start-btn:hover,
+.location-entrances .start-btn:focus-visible {
+  border-color: var(--green);
+  background: var(--soft);
+}
+
+.location-qr {
+  margin: 10px 0 0;
+}
